@@ -41,42 +41,36 @@ static const char *part_probes[] = { "cmdlinepart", NULL };
 struct mtd_partition s3c_partition_info[] = {
 #if defined(CONFIG_MACH_MANGO210)
 	{
-		.name		= "bootloader",
-		.offset		= 0,          /* for bootloader */
-		.size		= (1*SZ_1M),
+		.name		= "misc",
+		.offset		= 0x80000,          /* for bootloader */
+		.size		= 0x80000,
 //		.mask_flags	= MTD_CAP_NANDFLASH,
 	},
 	{
 		.name		= "recovery",
 		.offset		= MTDPART_OFS_APPEND,
-		.size		= (5*SZ_1M),
+		.size		= (8*SZ_1M),
 		//.mask_flags	= MTD_CAP_NANDFLASH,
 	},
 	{
 		.name		= "kernel",
 		.offset		= MTDPART_OFS_APPEND,
-		.size		= (5*SZ_1M),
+		.size		= (6*SZ_1M),
 	},
 	{
-		.name		= "ramdisk",
+		.name		= "logo",
 		.offset		= MTDPART_OFS_APPEND,
-		.size		= (3*SZ_1M),
+		.size		= (4*SZ_1M),
 	},
 	{
-		.name		= "system",
-		.offset		= MTDPART_OFS_APPEND,
-		.size		= (120*SZ_1M),
-//		.size		= (140*SZ_1M),
+		.name		= "rootfs-combin",
+		.offset		= 0x1500000,
+		.size		= (235*SZ_1M),
 	},
 	{
-		.name		= "cache",
+		.name		= "param",
 		.offset		= MTDPART_OFS_APPEND,
-		.size		= (80*SZ_1M),
-	},
-	{
-		.name		= "userdata",
-		.offset		= MTDPART_OFS_APPEND,
-		.size		= MTDPART_SIZ_FULL,
+		.size		= (2*SZ_1M),
 	}
 #else
 	{
