@@ -162,7 +162,7 @@ static int s3cfb_init_global(struct s3cfb_global *ctrl)
 {
 	ctrl->output = OUTPUT_RGB;
 #if defined(CONFIG_FB_S3C_LB070WV6)
-	ctrl->rgb_mode = MODE_BGR_P;
+	ctrl->rgb_mode = MODE_RGB_P;
 #else
 	ctrl->rgb_mode = MODE_RGB_P;
 #endif

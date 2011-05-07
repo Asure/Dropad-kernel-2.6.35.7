@@ -365,7 +365,7 @@ static struct platform_device mango_device_gpiokeys = {
 static struct platform_pwm_backlight_data mango_backlight_data = {
 	.pwm_id  = 0,
 	.max_brightness = 255,
-	.dft_brightness = 255,
+	.dft_brightness = 110,
 //	.pwm_period_ns  = 89284/2,
 	.pwm_period_ns  = 78770,
 };
