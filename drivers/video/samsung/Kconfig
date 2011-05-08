@@ -73,7 +73,10 @@ depends on FB_S3C
 prompt "Select LCD Type"
 default FB_S3C_LTE480WV
 
+
+
 config FB_S3C_LTE480WV
+	  
 	bool "LTE480WV"
 	depends on (MACH_SMDKV210 || MACH_SMDKC110)
 	---help---
@@ -99,6 +102,13 @@ config FB_S3C_LB070WV6
 	select BACKLIGHT_PWM
 	help
 	  This enables support for LG LB070WV6 7.0\" WVGA LCD panel
+
+config FB_S3C_AT070TN90
+	bool "AT070TN90"
+	depends on FB_S3C && (ARCH_S5PV210)
+	select BACKLIGHT_PWM
+	---help---
+	  This enables support for Innolux AT070TN90 7\" LCD used on Dropad/Herotab/M7009
 
 config FB_S3C_TL2796
         bool "TL2796"
