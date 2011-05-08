@@ -39,7 +39,7 @@ static const char *part_probes[] = { "cmdlinepart", NULL };
 
 #if defined(CONFIG_ARCH_S5PV210)
 struct mtd_partition s3c_partition_info[] = {
-#if defined(CONFIG_MACH_MANGO210)
+#if defined(CONFIG_MTD_NAND_S3C_DROPAD)
 	{
 		.name		= "misc",
 		.offset		= 0x80000,          /* for bootloader */

@@ -1378,6 +1378,12 @@ dm9000_probe(struct platform_device *pdev)
 	int iosize;
 	int i;
 	u32 id_val;
+	u8 addr[6];
+	
+	char *ptr = NULL;
+	char *ptr_end;
+	char ethaddr[17];
+	int k;
 
 	/* Init network device */
 	ndev = alloc_etherdev(sizeof(struct board_info));
@@ -1574,6 +1580,7 @@ dm9000_probe(struct platform_device *pdev)
 	db->mii.mdio_write   = dm9000_phy_write;
 
 	mac_src = "eeprom";
+	ptr 	= strstr(boot_command_line, "ethaddr=");
 
 	/* try reading the node address from the attached EEPROM */
 	for (i = 0; i < 6; i += 2)
@@ -1583,13 +1590,28 @@ dm9000_probe(struct platform_device *pdev)
 		mac_src = "platform data";
 		memcpy(ndev->dev_addr, pdata->dev_addr, 6);
 	}
-
+	
 	if (!is_valid_ether_addr(ndev->dev_addr)) {
 		/* try reading from mac */
 		
 		mac_src = "chip";
 		for (i = 0; i < 6; i++)
 			ndev->dev_addr[i] = ior(db, i+DM9000_PAR);
+	}
+	
+	if (!is_valid_ether_addr(ndev->dev_addr) && ptr) {
+		memcpy(ethaddr, ptr + 8, 17 * sizeof(char));
+		
+		mac_src = "commandline";
+		ptr_end = ethaddr;
+		
+		for (k = 0; k <= 5; k++) {
+			addr[k] = simple_strtol(ptr_end, &ptr_end, 16) |
+					simple_strtol(ptr_end, &ptr_end, 16) << 4;
+			ptr_end++; /* skip ":" in  ethaddr */
+		}
+		
+		memcpy(ndev->dev_addr, addr, sizeof(addr));
 	}
 
 	if (!is_valid_ether_addr(ndev->dev_addr))

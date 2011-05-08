@@ -282,6 +282,13 @@ config MTD_NAND_S3C_HWECC
 	  If you lay down a device with the hardware ECC, then you will
 	  currently not be able to switch to software, as there is no
 	  implementation for ECC method used by the S3C
+
+config MTD_NAND_S3C_DROPAD
+	bool "S3C NAND Dropad partitions"
+	depends on MTD_NAND_S3C && MACH_MANGO210
+	default y
+	help
+		Use the default NAND partition setup for Dropad/Herotab.
 	  
 config MTD_NAND_DISKONCHIP
 	tristate "DiskOnChip 2000, Millennium and Millennium Plus (NAND reimplementation) (EXPERIMENTAL)"

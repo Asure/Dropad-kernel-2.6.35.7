@@ -91,6 +91,7 @@ extern struct platform_device s5p6440_device_spi1;
 
 extern struct platform_device s3c_device_hwmon;
 extern struct platform_device s3c_device_keypad;
+extern struct platform_device s5p_device_dm9000;
 
 extern struct platform_device s3c_device_nand;
 extern struct platform_device s5pv210_device_nand;
