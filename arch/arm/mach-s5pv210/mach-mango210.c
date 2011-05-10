@@ -832,6 +832,26 @@ static void __init smsc911x_set(void)
 static void __init smsc911x_set(void) {}
 #endif
 
+#ifdef CONFIG_DM9000
+static void __init smdkv210_dm9000_set(void)
+{
+	unsigned int tmp;
+
+	tmp = ((0<<28)|(0<<24)|(7<<16)|(0<<12)|(0<<8)|(0<<4)|(0<<0));
+	__raw_writel(tmp, (S5P_SROM_BC1));
+
+	tmp = __raw_readl(S5P_SROM_BW);
+	tmp &= ~(0xf<<4);
+	tmp |= (1<<5);
+
+#ifdef CONFIG_DM9000_16BIT
+	tmp |= (1<<4);
+#else
+	tmp |= (0<<4);
+#endif
+}
+#endif
+
 
 #define S3C_GPIO_SETPIN_ZERO         0
 #define S3C_GPIO_SETPIN_ONE          1
@@ -873,6 +893,10 @@ static struct platform_device *mango210_devices[] __initdata = {
 
 #ifdef CONFIG_SMSC911X
 	&device_smsc911x,
+#endif
+
+#ifdef CONFIG_DM9000
+	&s5p_device_dm9000,
 #endif
 
 #ifdef CONFIG_VIDEO_MFC50
@@ -1194,6 +1218,10 @@ static void __init mango210_machine_init(void)
 
 #ifdef CONFIG_SMSC911X
 	smsc911x_set();
+#endif
+
+#ifdef CONFIG_DM9000
+	smdkv210_dm9000_set();
 #endif
 
 #ifdef CONFIG_USB_SUPPORT

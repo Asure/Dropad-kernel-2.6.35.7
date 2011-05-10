@@ -958,6 +958,12 @@ config DM9000
 	  To compile this driver as a module, choose M here.  The module
 	  will be called dm9000.
 
+config DM9000_16BIT
+	bool "DM9000 16-bit mode"
+	depends on DM9000
+	help
+	  Use the DM9000 in 16-bit mode. 
+
 config DM9000_DEBUGLEVEL
 	int "DM9000 maximum debug level"
 	depends on DM9000

@@ -14,6 +14,7 @@
 #include <linux/types.h>
 #include <linux/interrupt.h>
 #include <linux/list.h>
+#include <linux/dm9000.h>
 #include <linux/timer.h>
 #include <linux/init.h>
 #include <linux/gpio.h>
@@ -42,12 +43,12 @@
 
 /* Android Gadget */
 #include <linux/usb/android_composite.h>
-#define S3C_VENDOR_ID			0x18d1
+#define S3C_VENDOR_ID				0x18d1
 #if defined(CONFIG_MACH_MANGO210)
-#define S3C_UMS_PRODUCT_ID		0x0001
+#define S3C_UMS_PRODUCT_ID			0x0001
 #define S3C_UMS_ADB_PRODUCT_ID		0x0002
 #else
-#define S3C_UMS_PRODUCT_ID		0x4E21
+#define S3C_UMS_PRODUCT_ID			0x4E21
 #define S3C_UMS_ADB_PRODUCT_ID		0x4E22
 #endif
 #ifdef CONFIG_USB_ANDROID_RNDIS
@@ -181,6 +182,50 @@ struct platform_device s3c_device_usb_mass_storage = {
 		.platform_data = &ums_pdata,
 	},
 };
+
+#ifdef CONFIG_DM9000
+static struct resource s5p_dm9000_resources[] = {
+	[0] = {
+		.start = S5P_PA_DM9000,
+		.end   = S5P_PA_DM9000,
+		.flags = IORESOURCE_MEM,
+	},
+	[1] = {
+#if defined(CONFIG_DM9000_16BIT)
+		.start = S5P_PA_DM9000 + 4,
+		.end   = S5P_PA_DM9000 + 4,
+		.flags = IORESOURCE_MEM,
+#else
+		.start = S5P_PA_DM9000 + 1,
+		.end   = S5P_PA_DM9000 + 1,
+		.flags = IORESOURCE_MEM,
+#endif
+	},
+	[2] = {
+		.start = IRQ_EINT10,
+		.end   = IRQ_EINT10,
+		.flags = IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHLEVEL,
+	}
+};
+
+static struct dm9000_plat_data s5p_dm9000_platdata = {
+#if defined(CONFIG_DM9000_16BIT)
+	.flags = DM9000_PLATF_16BITONLY | DM9000_PLATF_NO_EEPROM,
+#else
+	.flags = DM9000_PLATF_8BITONLY | DM9000_PLATF_NO_EEPROM,
+#endif
+};
+
+struct platform_device s5p_device_dm9000 = {
+	.name			= "dm9000",
+	.id				=  0,
+	.num_resources	= ARRAY_SIZE(s5p_dm9000_resources),
+	.resource		= s5p_dm9000_resources,
+	.dev			= {
+		.platform_data = &s5p_dm9000_platdata,
+	}
+};
+#endif
 
 /* RTC */
 static struct resource s5p_rtc_resource[] = {
