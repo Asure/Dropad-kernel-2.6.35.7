@@ -61,9 +61,6 @@
 #include <mach/ts.h>
 #include <mach/irqs.h>
 
-#define CONFIG_TOUCHSCREEN_S3C_DEBUG
-#undef CONFIG_TOUCHSCREEN_S3C_DEBUG
-
 #define        X_COOR_MIN      180
 #define        X_COOR_MAX      4000
 #define        X_COOR_FUZZ     32
