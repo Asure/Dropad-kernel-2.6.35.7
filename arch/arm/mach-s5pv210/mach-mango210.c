@@ -843,15 +843,25 @@ static void __init smdkv210_dm9000_set(void)
 	tmp = __raw_readl(S5P_SROM_BW);
 	tmp &= ~(0xf<<4);
 	tmp |= (1<<5);
-
 #ifdef CONFIG_DM9000_16BIT
 	tmp |= (1<<4);
 #else
 	tmp |= (0<<4);
 #endif
+
+	__raw_writel(tmp, S5P_SROM_BW);
+
+/*
+ * MP01CON[7:4] defaults to CSn[1], no need to set it
+ *
+	tmp  = __raw_readl(S5PV210_MP01CON);
+	tmp &= ~(0xf << 4);
+	tmp |= (2 << 4);
+
+	__raw_writel(tmp,(S5PV210_MP01CON));
+*/
 }
 #endif
-
 
 #define S3C_GPIO_SETPIN_ZERO         0
 #define S3C_GPIO_SETPIN_ONE          1
