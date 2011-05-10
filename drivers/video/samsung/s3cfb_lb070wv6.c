@@ -16,17 +16,17 @@ static struct s3cfb_lcd lb070wv6 = {
 	.width	= 800,
 	.height	= 480,
 	.bpp	= 32,
-	.freq	= 60,
+	.freq	= 65,
 
 	.timing = {
-		.h_fp	= 10,
-		.h_bp	= 78,
-		.h_sw	= 10,
-		.v_fp	= 30,
+		.h_fp	= 64,
+		.h_bp	= 64,
+		.h_sw	= 128,
+		.v_fp	= 16,
 		.v_fpe	= 1,
-		.v_bp	= 30,
+		.v_bp	= 14,
 		.v_bpe	= 1,
-		.v_sw	= 2,
+		.v_sw	= 1,
 	},
 
 	.polarity = {
@@ -36,13 +36,6 @@ static struct s3cfb_lcd lb070wv6 = {
 		.inv_vden	= 0,
 	},
 };
-
-/* static void lcd_init(void)
-{
-write_power_item_value(POWER_LCD, 1);
-write_power_item_value(POWER_BACKLIGHT, 1);
-}
-*/
 
 /* name should be fixed as 's3cfb_set_lcd_info' */
 void s3cfb_set_lcd_info(struct s3cfb_global *ctrl)
