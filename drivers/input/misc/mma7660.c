@@ -1,4 +1,4 @@
-/* drivers/input/misc/bma150.c
+/* drivers/input/misc/mma7660.c
  *
  * Tri-axial acceleration sensor(BMA150) driver
  *

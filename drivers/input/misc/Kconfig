@@ -18,6 +18,12 @@ config GYRO_K3G
 	help
 	  This option enables gyro sensors using K3G driver
 
+config INPUT_MMA7660
+	tristate "MMA7660 Orientation sensor driver for Dropad/Herotab tablets"
+	default n
+	help
+	  This option enables orientation sensor using MMA7660 driver
+
 config INPUT_88PM860X_ONKEY
 	tristate "88PM860x ONKEY support"
 	depends on MFD_88PM860X

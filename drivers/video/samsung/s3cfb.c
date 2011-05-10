@@ -1042,7 +1042,7 @@ static int __devinit s3cfb_probe(struct platform_device *pdev)
 	}
 
 #ifdef CONFIG_FB_S3C_LCD_INIT
-#if defined(CONFIG_FB_S3C_TL2796) || defined(CONFIG_FB_S3C_LB070WV6)
+#if defined(CONFIG_FB_S3C_TL2796) || defined(CONFIG_FB_S3C_LB070WV6) || defined(CONFIG_FB_AT070TN90)
 	if (pdata->backlight_on)
 		pdata->backlight_on(pdev);
 #endif
@@ -1238,7 +1238,7 @@ void s3cfb_late_resume(struct early_suspend *h)
 
 	s3cfb_set_vsync_interrupt(fbdev, 1);
 	s3cfb_set_global_interrupt(fbdev, 1);
-#if defined (CONFIG_FB_S3C_LB070WV6) || defined(CONFIG_FB_S3C_LTN101NT05)
+#if defined (CONFIG_FB_S3C_LB070WV6) || defined(CONFIG_FB_S3C_LTN101NT05) || defined(CONFIG_FB_S3C_AT070TN90)
 	/* Reset the LDI chip */
 	if (pdata->lcd_on)
 		pdata->lcd_on(pdev);
