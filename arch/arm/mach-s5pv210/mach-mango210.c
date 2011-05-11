@@ -995,7 +995,12 @@ static struct platform_device *mango210_devices[] __initdata = {
 #ifdef CONFIG_HAVE_PWM
 	&mango_backlight_device,
 #endif
-//	&ram_console_device,
+
+//     &ram_console_device,
+
+#ifdef CONFIG_SND_S3C_SOC_AC97
+	&s5pv210_device_ac97,
+#endif
 };
 
 unsigned int HWREV;
