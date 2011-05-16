@@ -78,10 +78,13 @@ static char *usb_functions_all[] = {
 #ifdef CONFIG_USB_ANDROID_RNDIS
 	"rndis",
 #endif
+#ifdef CONFIG_USB_ANDROID_MASS_STORAGE
 	"usb_mass_storage",
+#endif
 	"adb",
 };
 static struct android_usb_product usb_products[] = {
+#ifdef CONFIG_USB_ANDROID_MASS_STORAGE
 	{
 		.product_id	= S3C_UMS_PRODUCT_ID,
 		.num_functions	= ARRAY_SIZE(usb_functions_ums),
@@ -92,6 +95,7 @@ static struct android_usb_product usb_products[] = {
 		.num_functions	= ARRAY_SIZE(usb_functions_ums_adb),
 		.functions	= usb_functions_ums_adb,
 	},
+#endif
 #ifdef CONFIG_USB_ANDROID_RNDIS
 	{
 		.product_id	= S3C_RNDIS_PRODUCT_ID,
