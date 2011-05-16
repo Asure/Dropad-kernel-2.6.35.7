@@ -55,7 +55,14 @@
 #define S3C_RNDIS_PRODUCT_ID		0x4E23
 #define S3C_RNDIS_ADB_PRODUCT_ID	0x4E24
 #endif
+#ifdef CONFIG_USB_ANDROID_ACM
+#define	S3C_ACM_PRODUCT_ID			0x2345
+#endif
 #define MAX_USB_SERIAL_NUM	17
+
+static char *usb_functions_acm[] = {
+	"acm",
+};
 
 static char *usb_functions_ums[] = {
 	"usb_mass_storage",
@@ -81,7 +88,12 @@ static char *usb_functions_all[] = {
 #ifdef CONFIG_USB_ANDROID_MASS_STORAGE
 	"usb_mass_storage",
 #endif
+#ifdef CONFIG_USB_ANDROID_ACM
+	"acm",
+#endif
+#ifdef CONFIG_USB_ANDROID_ADB
 	"adb",
+#endif
 };
 static struct android_usb_product usb_products[] = {
 #ifdef CONFIG_USB_ANDROID_MASS_STORAGE
@@ -106,6 +118,13 @@ static struct android_usb_product usb_products[] = {
 		.product_id	= S3C_RNDIS_ADB_PRODUCT_ID,
 		.num_functions	= ARRAY_SIZE(usb_functions_rndis_adb),
 		.functions	= usb_functions_rndis_adb,
+	},
+#endif
+#ifdef CONFIG_USB_ANDROID_ACM
+	{
+		.product_id	= S3C_ACM_PRODUCT_ID,
+		.num_functions = ARRAY_SIZE(usb_functions_acm),
+		.functions = usb_functions_acm,
 	},
 #endif
 };
@@ -133,7 +152,7 @@ static struct android_usb_platform_data android_usb_pdata = {
 #ifdef CONFIG_USB_ANDROID_RNDIS
 static struct usb_ether_platform_data rndis_pdata = {
 	/* ethaddr is filled by board_serialno_setup */
-	.vendorID	= 0x18d1,
+	.vendorID	= S3C_VENDOR_ID,
 	.vendorDescr	= "Samsung",
 };
 
@@ -163,6 +182,20 @@ void __init s3c_usb_set_serial(void)
 		rndis_pdata.ethaddr[i % (ETH_ALEN - 1) + 1] ^= *src++;
 	}
 }
+#endif
+#ifdef CONFIG_USB_ANDROID_ACM
+static struct acm_platform_data acm_pdata = {
+	.vendorID = S3C_VENDOR_ID,
+	.vendorDescr = "Ergotest",
+};
+
+struct platform_device s3c_device_acm = {
+	.name = "acm",
+	.id = -1,
+	.dev = {
+		.platform_data = &acm_pdata,
+	},
+};
 #endif
 struct platform_device s3c_device_android_usb = {
 	.name	= "android_usb",

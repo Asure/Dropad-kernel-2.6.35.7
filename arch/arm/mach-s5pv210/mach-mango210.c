@@ -944,6 +944,7 @@ static struct platform_device *mango210_devices[] __initdata = {
 #ifdef CONFIG_USB_GADGET
 	&s3c_device_usbgadget,
 #endif
+
 #ifdef CONFIG_USB_ANDROID
 	&s3c_device_android_usb,
 #ifdef CONFIG_USB_ANDROID_MASS_STORAGE
@@ -952,6 +953,9 @@ static struct platform_device *mango210_devices[] __initdata = {
 #ifdef CONFIG_USB_ANDROID_RNDIS
 	&s3c_device_rndis,
 #endif
+#ifdef CONFIG_USB_ANDROID_ACM
+#endif
+	&s3c_device_acm,
 #endif
 
 #ifdef CONFIG_S3C_DEV_HSMMC3

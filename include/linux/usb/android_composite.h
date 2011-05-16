@@ -88,6 +88,11 @@ struct usb_ether_platform_data {
 	const char *vendorDescr;
 };
 
+struct acm_platform_data {
+	u32 vendorID;
+	const char *vendorDescr;
+};
+
 extern void android_register_function(struct android_usb_function *f);
 
 extern void android_enable_function(struct usb_function *f, int enable);
