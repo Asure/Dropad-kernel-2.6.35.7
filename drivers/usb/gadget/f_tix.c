@@ -165,7 +165,7 @@ static inline void _unlock(atomic_t *excl)
 }
 
 /* add a request to the tail of a list */
-void req_put(struct tix_dev *dev, struct list_head *head,
+void request_put(struct tix_dev *dev, struct list_head *head,
 		struct usb_request *req)
 {
 	unsigned long flags;
@@ -176,7 +176,7 @@ void req_put(struct tix_dev *dev, struct list_head *head,
 }
 
 /* remove a request from the head of a list */
-struct usb_request *req_get(struct tix_dev *dev, struct list_head *head)
+struct usb_request *request_get(struct tix_dev *dev, struct list_head *head)
 {
 	unsigned long flags;
 	struct usb_request *req;
@@ -199,7 +199,7 @@ static void tix_complete_in(struct usb_ep *ep, struct usb_request *req)
 	if (req->status != 0)
 		dev->error = 1;
 
-	req_put(dev, &dev->tx_idle, req);
+	request_put(dev, &dev->tx_idle, req);
 
 	wake_up(&dev->write_wq);
 }
@@ -256,7 +256,7 @@ static int __init create_bulk_endpoints(struct tix_dev *dev,
 		if (!req)
 			goto fail;
 		req->complete = tix_complete_in;
-		req_put(dev, &dev->tx_idle, req);
+		request_put(dev, &dev->tx_idle, req);
 	}
 
 	return 0;
@@ -362,7 +362,7 @@ static ssize_t tix_write(struct file *fp, const char __user *buf,
 		/* get an idle tx request to use */
 		req = 0;
 		ret = wait_event_interruptible(dev->write_wq,
-			((req = req_get(dev, &dev->tx_idle)) || dev->error));
+			((req = request_get(dev, &dev->tx_idle)) || dev->error));
 
 		if (ret < 0) {
 			r = ret;
@@ -397,7 +397,7 @@ static ssize_t tix_write(struct file *fp, const char __user *buf,
 	}
 
 	if (req)
-		req_put(dev, &dev->tx_idle, req);
+		request_put(dev, &dev->tx_idle, req);
 
 	_unlock(&dev->write_excl);
 	DBG(cdev, "tix_write returning %d\n", r);
@@ -519,7 +519,7 @@ tix_function_unbind(struct usb_configuration *c, struct usb_function *f)
 	spin_lock_irq(&dev->lock);
 
 	tix_request_free(dev->rx_req, dev->ep_out);
-	while ((req = req_get(dev, &dev->tx_idle)))
+	while ((req = request_get(dev, &dev->tx_idle)))
 		tix_request_free(req, dev->ep_in);
 
 	dev->online = 0;
