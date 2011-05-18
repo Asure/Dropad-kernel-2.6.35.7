@@ -44,20 +44,28 @@
 /* Android Gadget */
 #include <linux/usb/android_composite.h>
 #define S3C_VENDOR_ID				0x18d1
-#if defined(CONFIG_MACH_MANGO210)
+
+#ifdef CONFIG_MACH_MANGO210
 #define S3C_UMS_PRODUCT_ID			0x0001
 #define S3C_UMS_ADB_PRODUCT_ID		0x0002
 #else
 #define S3C_UMS_PRODUCT_ID			0x4E21
 #define S3C_UMS_ADB_PRODUCT_ID		0x4E22
 #endif
+
 #ifdef CONFIG_USB_ANDROID_RNDIS
 #define S3C_RNDIS_PRODUCT_ID		0x4E23
 #define S3C_RNDIS_ADB_PRODUCT_ID	0x4E24
 #endif
-#ifdef CONFIG_USB_ANDROID_ACM
-#define	S3C_ACM_PRODUCT_ID			0x2345
+
+#ifdef CONFIG_USB_ANDROID_ACM 
+#ifdef CONFIG_MACH_MANGO210
+#define	S3C_ACM_PRODUCT_ID			0x0003
+#else
+#define	S3C_ACM_PRODUCT_ID			0x4E25
 #endif
+#endif
+
 #define MAX_USB_SERIAL_NUM	17
 
 static char *usb_functions_acm[] = {
