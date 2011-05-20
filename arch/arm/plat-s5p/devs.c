@@ -68,17 +68,23 @@
 
 #define MAX_USB_SERIAL_NUM	17
 
+#ifdef CONFIG_USB_ANDROID_ACM
 static char *usb_functions_acm[] = {
 	"acm",
 };
+#endif
 
+#ifdef CONFIG_USB_ANDROID_MASS_STORAGE
 static char *usb_functions_ums[] = {
 	"usb_mass_storage",
 };
+#endif
 
+#ifdef CONFIG_USB_ANDROID_RNDIS
 static char *usb_functions_rndis[] = {
 	"rndis",
 };
+#endif 
 
 static char *usb_functions_rndis_adb[] = {
 	"rndis",
@@ -191,10 +197,11 @@ void __init s3c_usb_set_serial(void)
 	}
 }
 #endif
+
 #ifdef CONFIG_USB_ANDROID_ACM
 static struct acm_platform_data acm_pdata = {
 	.vendorID = S3C_VENDOR_ID,
-	.vendorDescr = "Ergotest",
+	.vendorDescr = "Samsung",
 };
 
 struct platform_device s3c_device_acm = {
@@ -205,6 +212,7 @@ struct platform_device s3c_device_acm = {
 	},
 };
 #endif
+
 struct platform_device s3c_device_android_usb = {
 	.name	= "android_usb",
 	.id	= -1,
@@ -213,6 +221,7 @@ struct platform_device s3c_device_android_usb = {
 	},
 };
 
+#ifdef CONFIG_USB_ANDROID_MASS_STORAGE
 static struct usb_mass_storage_platform_data ums_pdata = {
 	.vendor			= "Android",
 	.product		= "UMS Composite",
@@ -227,6 +236,7 @@ struct platform_device s3c_device_usb_mass_storage = {
 		.platform_data = &ums_pdata,
 	},
 };
+#endif
 
 #ifdef CONFIG_DM9000
 static struct resource s5p_dm9000_resources[] = {
