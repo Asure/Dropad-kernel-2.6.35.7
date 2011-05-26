@@ -23,9 +23,26 @@
 
 /* Touch srcreen */
 static struct resource s3c_ts_resource[] = {
+#ifdef CONFIG_TOUCHSCREEN_USEAD1
 	[0] = {
-		.start = S3C_PA_ADC,
-		.end   = S3C_PA_ADC + SZ_4K - 1,
+		.start = S5PV2XX_PA_ADC1,
+		.end   = S5PV2XX_PA_ADC1 + SZ_4K - 1,
+		.flags = IORESOURCE_MEM,
+	},
+	[1] = {
+		.start = IRQ_PENDN1,
+		.end   = IRQ_PENDN1,
+		.flags = IORESOURCE_IRQ,
+	},
+	[2] = {
+		.start = IRQ_ADC1,
+		.end   = IRQ_ADC1,
+		.flags = IORESOURCE_IRQ,
+	}
+#else
+	[0] = {
+		.start = S5PV2XX_PA_ADC,
+		.end   = S5PV2XX_PA_ADC + SZ_4K - 1,
 		.flags = IORESOURCE_MEM,
 	},
 	[1] = {
@@ -38,13 +55,14 @@ static struct resource s3c_ts_resource[] = {
 		.end   = IRQ_ADC,
 		.flags = IORESOURCE_IRQ,
 	}
+#endif
 };
 
 struct platform_device s3c_device_ts = {
-	.name		  = "s3c-ts",
-	.id		  = -1,
-	.num_resources	  = ARRAY_SIZE(s3c_ts_resource),
-	.resource	  = s3c_ts_resource,
+	.name			= "s3c-ts",
+	.id 		= -1,
+	.num_resources 	= ARRAY_SIZE(s3c_ts_resource),
+	.resource 		= s3c_ts_resource,
 };
 
 void __init s3c_ts_set_platdata(struct s3c_ts_mach_info *pd)
@@ -52,6 +70,7 @@ void __init s3c_ts_set_platdata(struct s3c_ts_mach_info *pd)
 	struct s3c_ts_mach_info *npd;
 
 	npd = kmalloc(sizeof(*npd), GFP_KERNEL);
+	
 	if (npd) {
 		memcpy(npd, pd, sizeof(*npd));
 		s3c_device_ts.dev.platform_data = npd;
@@ -59,5 +78,3 @@ void __init s3c_ts_set_platdata(struct s3c_ts_mach_info *pd)
 		printk(KERN_ERR "no memory for Touchscreen platform data\n");
 	}
 }
-
-

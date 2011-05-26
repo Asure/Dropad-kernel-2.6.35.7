@@ -176,6 +176,12 @@ config S5P_ADC
 	default y
 	help
 	  ADC ( A/D Conversion ) driver for Samsung S5PXXXX
+		
+config TOUCHSCREEN_USEAD1
+	bool 	"Touchscreen uses AD1 instead of AD0"
+	depends on S5P_ADC
+	help
+		Select this if the touchscreen is connected to interface 1
 
 config S5PV210_SETUP_FIMC0
 	bool

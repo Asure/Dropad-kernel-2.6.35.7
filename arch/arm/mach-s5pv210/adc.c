@@ -69,6 +69,9 @@
 static struct clk	*adc_clock;
 
 static void __iomem	*base_addr;
+#ifdef CONFIG_TOUCHSCREEN_USEAD1
+static void __iomem *base_addr0;
+#endif
 static int adc_port;
 struct s3c_adc_mach_info *plat_data;
 
@@ -278,6 +281,15 @@ static int __devinit s3c_adc_probe(struct platform_device *pdev)
 		ret = -ENOENT;
 		goto err_map;
 	}
+	
+#ifdef CONFIG_TOUCHSCREEN_USEAD1
+	base_addr0 = ioremap(res->start-size, size);
+	if (base_addr0 == NULL) {
+		dev_err(dev, "fail to ioremap() region\n");
+		ret = -ENOENT;
+		goto err_map;
+	}
+#endif
 
 	adc_clock = clk_get(&pdev->dev, "adc");
 
@@ -325,6 +337,9 @@ err_clk:
 
 err_map:
 	iounmap(base_addr);
+#ifdef CONFIG_TOUCHSCREEN_USEAD1
+	iounmap(base_addr0);
+#endif
 
 #if !defined(ADC_WITH_TOUCHSCREEN)
 err_req:

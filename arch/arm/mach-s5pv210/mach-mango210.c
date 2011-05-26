@@ -33,6 +33,7 @@
 #include <asm/mach-types.h>
 #include <asm/system.h>
 
+#include <mach/adc.h>
 #include <mach/map.h>
 #include <mach/regs-clock.h>
 #include <mach/gpio.h>
@@ -301,11 +302,11 @@ struct platform_device sec_device_dpram = {
 
 #ifdef CONFIG_TOUCHSCREEN_S3C
 static struct s3c_ts_mach_info s3c_ts_platform __initdata = {
-	.delay                  = 50000,
-	.presc                  = 49,
-	.oversampling_shift     = 2,
-	.resol_bit              = 12,
-	.s3c_adc_con            = ADC_TYPE_2,
+	.delay              = 10000,
+	.presc              = 49,
+	.oversampling_shift = 2,
+	.resol_bit          = 12,
+	.s3c_adc_con        = ADC_TYPE_2,
 };
 #endif
 

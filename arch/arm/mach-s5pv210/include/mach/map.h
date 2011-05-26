@@ -160,6 +160,7 @@
 #define S5PV2XX_SZ_KEYPAD       SZ_4K
 
 #define S5PV2XX_PA_ADC          (0xE1700000)
+#define S5PV2XX_PA_ADC1         (0xE1701000)
 #define S3C_PA_ADC              S5PV2XX_PA_ADC
 
 #define S5PV2XX_PA_KEYPAD       (0xE1600000)

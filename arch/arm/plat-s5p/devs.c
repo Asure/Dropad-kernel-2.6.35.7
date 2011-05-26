@@ -159,9 +159,9 @@ static struct android_usb_platform_data android_usb_pdata = {
 #endif
 	.serial_number		= device_serial,
 	.num_products		= ARRAY_SIZE(usb_products),
-	.products		= usb_products,
+	.products			= usb_products,
 	.num_functions		= ARRAY_SIZE(usb_functions_all),
-	.functions		= usb_functions_all,
+	.functions			= usb_functions_all,
 };
 #ifdef CONFIG_USB_ANDROID_RNDIS
 static struct usb_ether_platform_data rndis_pdata = {
@@ -323,18 +323,35 @@ static struct resource s3c_keypad_resource[] = {
 };
 
 struct platform_device s3c_device_keypad = {
-	.name             = "s3c-keypad",
-	.id               = -1,
-	.num_resources    = ARRAY_SIZE(s3c_keypad_resource),
-	.resource         = s3c_keypad_resource,
+	.name 				= "s3c-keypad",
+	.id 			= -1,
+	.num_resources 		= ARRAY_SIZE(s3c_keypad_resource),
+	.resource 			= s3c_keypad_resource,
 };
 
 #ifdef CONFIG_S5P_ADC
 /* ADCTS */
 static struct resource s3c_adc_resource[] = {
+#ifdef CONFIG_TOUCHSCREEN_USEAD1	
 	[0] = {
-		.start = S3C_PA_ADC,
-		.end   = S3C_PA_ADC + SZ_4K - 1,
+		.start = S5PV2XX_PA_ADC1,
+		.end   = S5PV2XX_PA_ADC1 + SZ_4K - 1,
+		.flags = IORESOURCE_MEM,
+	},
+	[1] = {
+		.start = IRQ_PENDN1,
+		.end   = IRQ_PENDN1,
+		.flags = IORESOURCE_IRQ,
+	},
+	[2] = {
+		.start = IRQ_ADC1,
+		.end   = IRQ_ADC1,
+		.flags = IORESOURCE_IRQ,
+	}
+#else
+	[0] = {
+		.start = S5PV2XX_PA_ADC,
+		.end   = S5PV2XX_PA_ADC + SZ_4K - 1,
 		.flags = IORESOURCE_MEM,
 	},
 	[1] = {
@@ -347,13 +364,14 @@ static struct resource s3c_adc_resource[] = {
 		.end   = IRQ_ADC,
 		.flags = IORESOURCE_IRQ,
 	}
+#endif
 };
 
 struct platform_device s3c_device_adc = {
-	.name		  = "s3c-adc",
-	.id               = -1,
-	.num_resources	  = ARRAY_SIZE(s3c_adc_resource),
-	.resource	  = s3c_adc_resource,
+	.name 				= "s3c-adc",
+	.id 			= -1,
+	.num_resources 		= ARRAY_SIZE(s3c_adc_resource),
+	.resource	  		= s3c_adc_resource,
 };
 
 void __init s3c_adc_set_platdata(struct s3c_adc_mach_info *pd)

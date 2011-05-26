@@ -61,11 +61,11 @@
 #include <mach/ts.h>
 #include <mach/irqs.h>
 
-#define        X_COOR_MIN      180
+#define        X_COOR_MIN      160
 #define        X_COOR_MAX      4000
 #define        X_COOR_FUZZ     32
-#define        Y_COOR_MIN      300
-#define        Y_COOR_MAX      3900
+#define        Y_COOR_MIN      550
+#define        Y_COOR_MAX      3750
 #define        Y_COOR_FUZZ     32
 
 /* For ts->dev.id.version */
@@ -99,6 +99,9 @@ struct s3c_ts_mach_info s3c_ts_default_cfg __initdata = {
  */
 static char *s3c_ts_name = "S5P TouchScreen";
 static void __iomem 		*ts_base;
+#ifdef CONFIG_TOUCHSCREEN_USEAD1
+static void __iomem 		*ts_base0;
+#endif
 static struct resource		*ts_mem;
 static struct resource		*ts_irq;
 static struct clk		*ts_clock;
@@ -118,6 +121,8 @@ static void touch_timer_fire(unsigned long data)
 
 	updown = (!(data0 & S3C_ADCDAT0_UPDOWN)) && (!(data1 & S3C_ADCDAT1_UPDOWN));
 
+	printk(KERN_INFO "s3c-ts: touch_timer_fire (%c)\n",	updown ? 'D' : 'U');
+
 	if (updown) {
 		if (ts->count) {
 
@@ -135,7 +140,7 @@ static void touch_timer_fire(unsigned long data)
 #if defined(CONFIG_FB_S3C_LTE480WV)
 			y = 4000 - y;
 #endif /* CONFIG_FB_S3C_LTE480WV */
-			//printk("Cordinates x=%d, y=%d\n",(int) x,(int) y);
+			printk(KERN_INFO "Coordinates x=%d, y=%d\n",(int) x,(int) y);
 			input_report_abs(ts->dev, ABS_X, x);
 			input_report_abs(ts->dev, ABS_Y, y);
 			input_report_abs(ts->dev, ABS_Z, 0);
@@ -189,7 +194,7 @@ static irqreturn_t stylus_updown(int irqno, void *param)
 	updown = (!(data0 & S3C_ADCDAT0_UPDOWN)) && (!(data1 & S3C_ADCDAT1_UPDOWN));
 
 #ifdef CONFIG_TOUCHSCREEN_S3C_DEBUG
-       printk(KERN_INFO "   %c\n",	updown ? 'D' : 'U');
+       printk(KERN_INFO "s3c-ts: stylus-updown (%c)\n",	updown ? 'D' : 'U');
 #endif
 
 	/* TODO we should never get an interrupt with updown set while
@@ -202,6 +207,8 @@ static irqreturn_t stylus_updown(int irqno, void *param)
 	if (ts->s3c_adc_con == ADC_TYPE_2) {
 		__raw_writel(0x0, ts_base+S3C_ADCCLRWK);
 		__raw_writel(0x0, ts_base+S3C_ADCCLRINT);
+		
+		printk(KERN_INFO "Interrupt cleared\n");
 	}
 
 	return IRQ_HANDLED;
@@ -209,6 +216,8 @@ static irqreturn_t stylus_updown(int irqno, void *param)
 
 static irqreturn_t stylus_action(int irqno, void *param)
 {
+	printk(KERN_INFO "s3c-ts: stylus_action");
+	
 	unsigned long data0;
 	unsigned long data1;
 
@@ -297,6 +306,15 @@ static int __init s3c_ts_probe(struct platform_device *pdev)
 		ret = -EINVAL;
 		goto err_map;
 	}
+	
+#ifdef CONFIG_TOUCHSCREEN_USEAD1
+	ts_base0 = ioremap(res->start - 1000, size);
+	if (ts_base0 == NULL) {
+		dev_err(dev, "failed to ioremap() region\n");
+		ret = -EINVAL;
+		goto err_map;
+	}
+#endif
 
 	ts_clock = clk_get(&pdev->dev, "adc");
 	if (IS_ERR(ts_clock)) {
@@ -308,11 +326,16 @@ static int __init s3c_ts_probe(struct platform_device *pdev)
 	clk_enable(ts_clock);
 
 	s3c_ts_cfg = s3c_ts_get_platdata(&pdev->dev);
+	
 	if ((s3c_ts_cfg->presc&0xff) > 0)
 		writel(S3C_ADCCON_PRSCEN | S3C_ADCCON_PRSCVL(s3c_ts_cfg->presc&0xFF),\
 				ts_base+S3C_ADCCON);
 	else
 		writel(0, ts_base+S3C_ADCCON);
+	
+#ifdef CONFIG_TOUCHSCREEN_USEAD1
+	writel (readl(ts_base0 + S3C_ADCCON) | 0x20000, ts_base0 + S3C_ADCCON);
+#endif
 
 	/* Initialise registers */
 	if ((s3c_ts_cfg->delay&0xffff) > 0)
@@ -333,8 +356,9 @@ static int __init s3c_ts_probe(struct platform_device *pdev)
 			break;
 		}
 	}
-
-	writel(WAIT4INT(0), ts_base+S3C_ADCTSC);
+	
+	
+	writel(WAIT4INT(0), ts_base + S3C_ADCTSC);
 
 	ts = kzalloc(sizeof(struct s3c_ts_info), GFP_KERNEL);
 
@@ -366,21 +390,22 @@ static int __init s3c_ts_probe(struct platform_device *pdev)
 
 	sprintf(ts->phys, "input(ts)");
 
-	ts->dev->name = s3c_ts_name;
-	ts->dev->phys = ts->phys;
+	ts->dev->name 		= s3c_ts_name;
+	ts->dev->phys 		= ts->phys;
 	ts->dev->id.bustype = BUS_RS232;
-	ts->dev->id.vendor = 0xDEAD;
+	ts->dev->id.vendor 	= 0xDEAD;
 	ts->dev->id.product = 0xBEEF;
 	ts->dev->id.version = S3C_TSVERSION;
 
-	ts->shift = s3c_ts_cfg->oversampling_shift;
-	ts->resol_bit = s3c_ts_cfg->resol_bit;
-	ts->s3c_adc_con = s3c_ts_cfg->s3c_adc_con;
+	ts->shift 			= s3c_ts_cfg->oversampling_shift;
+	ts->resol_bit 		= s3c_ts_cfg->resol_bit;
+	ts->s3c_adc_con 	= s3c_ts_cfg->s3c_adc_con;
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
-	ts->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
-	ts->early_suspend.suspend = ts_early_suspend;
-	ts->early_suspend.resume =ts_late_resume;
+	ts->early_suspend.level 	= EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
+	ts->early_suspend.suspend 	= ts_early_suspend;
+	ts->early_suspend.resume 	= ts_late_resume;
+	
 	register_early_suspend(&ts->early_suspend);
 #endif /* CONFIG_HAS_EARLYSUSPEND */
 
@@ -392,7 +417,7 @@ static int __init s3c_ts_probe(struct platform_device *pdev)
 		goto err_irq;
 	}
 
-	ret = request_irq(ts_irq->start, stylus_updown, irq_flags, "s3c_updown", ts);
+	ret = request_irq(ts_irq->start, stylus_updown, IRQF_SAMPLE_RANDOM, "s3c_updown", ts);
 	if (ret != 0) {
 		dev_err(dev, "s3c_ts.c: Could not allocate ts IRQ_PENDN !\n");
 		ret = -EIO;
@@ -407,14 +432,12 @@ static int __init s3c_ts_probe(struct platform_device *pdev)
 		goto err_irq;
 	}
 
-	ret = request_irq(ts_irq->start, stylus_action, irq_flags, "s3c_action", ts);
+	ret = request_irq(ts_irq->start, stylus_action, IRQF_SAMPLE_RANDOM, "s3c_action", ts);
 	if (ret != 0) {
 		dev_err(dev, "s3c_ts.c: Could not allocate ts IRQ_ADC !\n");
 		ret =  -EIO;
 		goto err_irq;
 	}
-
-	printk(KERN_INFO "%s got loaded successfully : %d bits\n", s3c_ts_name, s3c_ts_cfg->resol_bit);
 
 	/* All went ok, so register to the input system */
 	ret = input_register_device(ts->dev);
@@ -423,6 +446,8 @@ static int __init s3c_ts_probe(struct platform_device *pdev)
 		ret = -EIO;
 		goto fail;
 	}
+
+	printk(KERN_INFO "%s got loaded successfully : %d bits\n", s3c_ts_name, s3c_ts_cfg->resol_bit);
 
 	return 0;
 
@@ -440,6 +465,9 @@ err_alloc:
 
 err_clk:
 	iounmap(ts_base);
+#ifdef CONFIG_TOUCHSCREEN_USEAD1
+	iounmap(ts_base0);
+#endif
 
 err_map:
 	release_resource(ts_mem);
@@ -471,6 +499,9 @@ static int s3c_ts_remove(struct platform_device *dev)
 
 	input_unregister_device(ts->dev);
 	iounmap(ts_base);
+#ifdef CONFIG_TOUCHSCREEN_USEAD1
+	iounmap(ts_base0);
+#endif
 
 	return 0;
 }
@@ -495,6 +526,10 @@ static int s3c_ts_suspend(struct platform_device *dev, pm_message_t state)
 static int s3c_ts_resume(struct platform_device *pdev)
 {
 	clk_enable(ts_clock);
+
+#ifdef CONFIG_TOUCHSCREEN_USEAD1	
+	writel(readl(ts_base0 + S3C_ADCCON) | 0x20000, ts_base0 + S3C_ADCCON);
+#endif
 
 	writel(adccon, ts_base+S3C_ADCCON);
 	writel(adctsc, ts_base+S3C_ADCTSC);
