@@ -126,8 +126,8 @@ struct if_sdio_card {
 	const char		*helper;
 	const char		*firmware;
 
-	u8			buffer[65536];
-
+	u8			buffer[65536] __attribute__((aligned(4)));
+	
 	spinlock_t		lock;
 	struct if_sdio_packet	*packets;
 
