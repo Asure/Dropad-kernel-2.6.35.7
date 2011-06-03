@@ -656,7 +656,7 @@ static void __init mango210_usb_host_set(void)
 }
 #endif
 
-#if defined(CONFIG_FB_S3C_LB070WV6) || defined(CONFIG_FB_S3C_LTN101NT05) || 
+#if defined(CONFIG_FB_S3C_LB070WV6) || defined(CONFIG_FB_S3C_LTN101NT05) || \
 	defined(CONFIG_FB_S3C_AT070TN90) || defined (CONFIG_FB_S3C_UTLCD7B)
 static struct s3c_platform_fb mango_fb_data __initdata = {
 	.hw_ver	= 0x62,
@@ -1195,7 +1195,7 @@ static void __init mango210_machine_init(void)
 	i2c_register_board_info(1, i2c_devs1, ARRAY_SIZE(i2c_devs1));
 	i2c_register_board_info(2, i2c_devs2, ARRAY_SIZE(i2c_devs2));
 
-#if defined(CONFIG_FB_S3C_LB070WV6) || defined(CONFIG_FB_S3C_LTN101NT05) || 
+#if defined(CONFIG_FB_S3C_LB070WV6) || defined(CONFIG_FB_S3C_LTN101NT05) || \
 	defined(CONFIG_FB_S3C_AT070TN90) || defined(CONFIG_FB_S3C_UTLCD7B)
 	s3cfb_set_platdata(&mango_fb_data);
 #endif
