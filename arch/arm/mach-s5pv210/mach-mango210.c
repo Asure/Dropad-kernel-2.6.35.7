@@ -35,6 +35,7 @@
 
 #include <mach/adc.h>
 #include <mach/map.h>
+#include <mach/regs-adc.h>
 #include <mach/regs-clock.h>
 #include <mach/gpio.h>
 #include <mach/regs-gpio.h>
@@ -307,6 +308,12 @@ static struct s3c_ts_mach_info s3c_ts_platform __initdata = {
 	.oversampling_shift = 2,
 	.resol_bit          = 12,
 	.s3c_adc_con        = ADC_TYPE_2,
+};
+
+static struct s3c_adc_mach_info s3c_adc_platform __initdata = {
+	.delay 			= 0xff,
+	.presc 			= 49,
+	.resolution 	= 12,
 };
 #endif
 
@@ -649,7 +656,8 @@ static void __init mango210_usb_host_set(void)
 }
 #endif
 
-#if defined(CONFIG_FB_S3C_LB070WV6) || defined(CONFIG_FB_S3C_LTN101NT05) || defined(CONFIG_FB_S3C_AT070TN90)
+#if defined(CONFIG_FB_S3C_LB070WV6) || defined(CONFIG_FB_S3C_LTN101NT05) || 
+	defined(CONFIG_FB_S3C_AT070TN90) || defined (CONFIG_FB_S3C_UTLCD7B)
 static struct s3c_platform_fb mango_fb_data __initdata = {
 	.hw_ver	= 0x62,
 	.nr_wins = 5,
@@ -885,6 +893,7 @@ static struct platform_device *mango210_devices[] __initdata = {
 #ifdef CONFIG_MTD_NAND
 	&s5pv210_device_nand,
 #endif
+	&s3c_device_adc,
 #ifdef CONFIG_TOUCHSCREEN_S3C
 	&s3c_device_ts,
 #endif
@@ -1186,11 +1195,13 @@ static void __init mango210_machine_init(void)
 	i2c_register_board_info(1, i2c_devs1, ARRAY_SIZE(i2c_devs1));
 	i2c_register_board_info(2, i2c_devs2, ARRAY_SIZE(i2c_devs2));
 
-#if defined(CONFIG_FB_S3C_LB070WV6) || defined(CONFIG_FB_S3C_LTN101NT05) || defined(CONFIG_FB_S3C_AT070TN90)
+#if defined(CONFIG_FB_S3C_LB070WV6) || defined(CONFIG_FB_S3C_LTN101NT05) || 
+	defined(CONFIG_FB_S3C_AT070TN90) || defined(CONFIG_FB_S3C_UTLCD7B)
 	s3cfb_set_platdata(&mango_fb_data);
 #endif
 
 #if defined(CONFIG_TOUCHSCREEN_S3C)
+	s3c_adc_set_platdata(&s3c_adc_platform);
 	s3c_ts_set_platdata(&s3c_ts_platform);
 #endif
 

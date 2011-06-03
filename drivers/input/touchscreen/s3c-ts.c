@@ -121,8 +121,6 @@ static void touch_timer_fire(unsigned long data)
 
 	updown = (!(data0 & S3C_ADCDAT0_UPDOWN)) && (!(data1 & S3C_ADCDAT1_UPDOWN));
 
-	printk(KERN_INFO "s3c-ts: touch_timer_fire (%c)\n",	updown ? 'D' : 'U');
-
 	if (updown) {
 		if (ts->count) {
 
@@ -137,10 +135,9 @@ static void touch_timer_fire(unsigned long data)
 #ifdef CONFIG_ANDROID
 			x=(int) ts->xp/ts->count;
 			y=(int) ts->yp/ts->count;
-#if defined(CONFIG_FB_S3C_LTE480WV)
+#if defined(CONFIG_FB_S3C_LTE480WV) || defined(CONFIG_FB_S3C_UTLCD7B) 
 			y = 4000 - y;
 #endif /* CONFIG_FB_S3C_LTE480WV */
-			printk(KERN_INFO "Coordinates x=%d, y=%d\n",(int) x,(int) y);
 			input_report_abs(ts->dev, ABS_X, x);
 			input_report_abs(ts->dev, ABS_Y, y);
 			input_report_abs(ts->dev, ABS_Z, 0);
@@ -193,10 +190,6 @@ static irqreturn_t stylus_updown(int irqno, void *param)
 
 	updown = (!(data0 & S3C_ADCDAT0_UPDOWN)) && (!(data1 & S3C_ADCDAT1_UPDOWN));
 
-#ifdef CONFIG_TOUCHSCREEN_S3C_DEBUG
-       printk(KERN_INFO "s3c-ts: stylus-updown (%c)\n",	updown ? 'D' : 'U');
-#endif
-
 	/* TODO we should never get an interrupt with updown set while
 	 * the timer is running, but maybe we ought to verify that the
 	 * timer isn't running anyways. */
@@ -207,8 +200,6 @@ static irqreturn_t stylus_updown(int irqno, void *param)
 	if (ts->s3c_adc_con == ADC_TYPE_2) {
 		__raw_writel(0x0, ts_base+S3C_ADCCLRWK);
 		__raw_writel(0x0, ts_base+S3C_ADCCLRINT);
-		
-		printk(KERN_INFO "Interrupt cleared\n");
 	}
 
 	return IRQ_HANDLED;
@@ -216,8 +207,6 @@ static irqreturn_t stylus_updown(int irqno, void *param)
 
 static irqreturn_t stylus_action(int irqno, void *param)
 {
-	printk(KERN_INFO "s3c-ts: stylus_action");
-	
 	unsigned long data0;
 	unsigned long data1;
 
@@ -332,10 +321,6 @@ static int __init s3c_ts_probe(struct platform_device *pdev)
 				ts_base+S3C_ADCCON);
 	else
 		writel(0, ts_base+S3C_ADCCON);
-	
-#ifdef CONFIG_TOUCHSCREEN_USEAD1
-	writel (readl(ts_base0 + S3C_ADCCON) | 0x20000, ts_base0 + S3C_ADCCON);
-#endif
 
 	/* Initialise registers */
 	if ((s3c_ts_cfg->delay&0xffff) > 0)
@@ -356,8 +341,7 @@ static int __init s3c_ts_probe(struct platform_device *pdev)
 			break;
 		}
 	}
-	
-	
+		
 	writel(WAIT4INT(0), ts_base + S3C_ADCTSC);
 
 	ts = kzalloc(sizeof(struct s3c_ts_info), GFP_KERNEL);
@@ -417,7 +401,7 @@ static int __init s3c_ts_probe(struct platform_device *pdev)
 		goto err_irq;
 	}
 
-	ret = request_irq(ts_irq->start, stylus_updown, IRQF_SAMPLE_RANDOM, "s3c_updown", ts);
+	ret = request_irq(ts_irq->start, stylus_updown, irq_flags, "s3c_updown", ts);
 	if (ret != 0) {
 		dev_err(dev, "s3c_ts.c: Could not allocate ts IRQ_PENDN !\n");
 		ret = -EIO;
@@ -432,7 +416,7 @@ static int __init s3c_ts_probe(struct platform_device *pdev)
 		goto err_irq;
 	}
 
-	ret = request_irq(ts_irq->start, stylus_action, IRQF_SAMPLE_RANDOM, "s3c_action", ts);
+	ret = request_irq(ts_irq->start, stylus_action, irq_flags, "s3c_action", ts);
 	if (ret != 0) {
 		dev_err(dev, "s3c_ts.c: Could not allocate ts IRQ_ADC !\n");
 		ret =  -EIO;

@@ -304,6 +304,10 @@ static int __devinit s3c_adc_probe(struct platform_device *pdev)
 	/* read platform data from device struct */
 	plat_data = s3c_adc_get_platdata(&pdev->dev);
 
+#ifdef CONFIG_TOUCHSCREEN_USEAD1
+	writel (readl(base_addr0 + S3C_ADCCON) | 0x20000, base_addr0 + S3C_ADCCON);
+#endif
+
 	if ((plat_data->presc & 0xff) > 0)
 		writel(S3C_ADCCON_PRSCEN |
 		       S3C_ADCCON_PRSCVL(plat_data->presc & 0xff),

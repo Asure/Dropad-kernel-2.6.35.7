@@ -193,7 +193,7 @@ static int __devinit tv_clk_get(struct platform_device *pdev,
 	/* sclk_dac's parent is fixed as mout_vpll */
 	clk_set_parent(ctrl->sclk_dac, mout_vpll);
 
-	clk_set_rate(fout_vpll, 54000000);
+	/* clk_set_rate(fout_vpll, 54000000); */
 	clk_set_rate(ctrl->sclk_pixel, 54000000);
 
 	clk_enable(ctrl->sclk_dac);

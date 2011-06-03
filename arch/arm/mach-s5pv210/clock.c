@@ -1517,16 +1517,19 @@ void __init_or_cpufreq s5pv210_setup_clocks(void)
 	/*Assign clock source and rates for IP's*/
 	for (ptr = 0; ptr < ARRAY_SIZE(clksrcs); ptr++) {
 		pclkSrc = &clksrcs[ptr];
+		
 		if (!strcmp(pclkSrc->clk.name, "sclk_mdnie")) {
 			clk_set_parent(&pclkSrc->clk, &clk_mout_mpll.clk);
 			clk_set_rate(&pclkSrc->clk, 167*MHZ);
 		} else if (!strcmp(pclkSrc->clk.name, "sclk_mmc")) {
 			clk_set_parent(&pclkSrc->clk, &clk_mout_mpll.clk);
 
+			/*
 			if (pclkSrc->clk.id == 0)
 				clk_set_rate(&pclkSrc->clk, 52*MHZ);
 			else
 				clk_set_rate(&pclkSrc->clk, 50*MHZ);
+			*/
 		} else if (!strcmp(pclkSrc->clk.name, "sclk_spi")) {
 			clk_set_parent(&pclkSrc->clk, &clk_mout_epll.clk);
 		} else if (!strcmp(pclkSrc->clk.name, "sclk_cam") &&

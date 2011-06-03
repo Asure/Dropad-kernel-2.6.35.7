@@ -23,7 +23,7 @@
 
 /* Touch srcreen */
 static struct resource s3c_ts_resource[] = {
-#ifdef CONFIG_TOUCHSCREEN_USEAD1
+#ifdef CONFIG_TOUCHSCREEN_USEAD1	
 	[0] = {
 		.start = S5PV2XX_PA_ADC1,
 		.end   = S5PV2XX_PA_ADC1 + SZ_4K - 1,

@@ -117,7 +117,9 @@ void s3cfb_get_clk_name(char *clk_name)
 {
 	strcpy(clk_name, "sclk_fimd");
 }
-#if defined(CONFIG_FB_S3C_LTE480WV) || defined(CONFIG_FB_S3C_LB070WV6) || defined(CONFIG_FB_S3C_LTN101NT05) || defined(CONFIG_FB_S3C_AT070TN90)
+#if defined(CONFIG_FB_S3C_LTE480WV) || defined(CONFIG_FB_S3C_LB070WV6) || 
+	defined(CONFIG_FB_S3C_LTN101NT05) || defined(CONFIG_FB_S3C_AT070TN90 ||
+	defined(CONFIG_FB_S3C_UTLCD7B)
 int s3cfb_backlight_onoff(struct platform_device *pdev, int onoff)
 {
 #if !defined(CONFIG_BACKLIGHT_PWM)

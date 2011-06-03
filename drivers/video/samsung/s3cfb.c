@@ -161,7 +161,7 @@ static void s3cfb_set_window(struct s3cfb_global *ctrl, int id, int enable)
 static int s3cfb_init_global(struct s3cfb_global *ctrl)
 {
 	ctrl->output = OUTPUT_RGB;
-#if defined(CONFIG_FB_S3C_LB070WV6)
+#if defined(CONFIG_FB_S3C_LB070WV6) || defined(CONFIG_FB_S3C_UTLCD7B)
 	ctrl->rgb_mode = MODE_BGR_P;
 #else
 	ctrl->rgb_mode = MODE_RGB_P;

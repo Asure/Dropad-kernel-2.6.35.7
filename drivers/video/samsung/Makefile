@@ -9,6 +9,7 @@ obj-$(CONFIG_ARCH_S5PV210)	+= s3cfb_fimd6x.o
 obj-$(CONFIG_FB_S3C_AT070TN90)  += s3cfb_at070tn90.o
 obj-$(CONFIG_FB_S3C_LTN101NT05)	+= s3cfb_ltn101nt05.o
 obj-$(CONFIG_FB_S3C_LB070WV6)	+= s3cfb_lb070wv6.o
+obj-$(CONFIG_FB_S3C_UTLCD7B)	+= s3cfb_lb070wv6.o
 obj-$(CONFIG_FB_S3C_LTE480WV)	+= s3cfb_lte480wv.o
 obj-$(CONFIG_FB_S3C_LVDS)       += s3cfb_lvds.o
 obj-$(CONFIG_FB_S3C_HT101HD1)   += s3cfb_ht101hd1.o

@@ -102,6 +102,13 @@ config FB_S3C_LB070WV6
 	select BACKLIGHT_PWM
 	help
 	  This enables support for LG LB070WV6 7.0\" WVGA LCD panel
+	  
+config FB_S3C_UTLCD7B
+	bool "UT LCD7B"
+	depends on FB_S3C && (ARCH_S5PV210)
+	select BACKLIGHT_PWM
+	help
+	  This enables support for Urbetter 10.1\" LCD panel
 
 config FB_S3C_AT070TN90
 	bool "AT070TN90"
