@@ -150,6 +150,10 @@ extern struct platform_device s3c_device_ac97;
 
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_DUMMY
+extern struct platform_device s5p_device_dummy;
+#endif
+
 extern struct platform_device s5p_device_smsc911x;
 extern struct platform_device s5p_device_tvout;
 extern struct platform_device s5p_device_cec;
