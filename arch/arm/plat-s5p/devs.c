@@ -241,8 +241,8 @@ struct platform_device s3c_device_usb_mass_storage = {
 #ifdef CONFIG_TOUCHSCREEN_DUMMY
 static struct resource s5p_dummy_resources[] = {
 	[0] = { 
-		.start = S5P_PA_DUMMY,
-		.end   = S5P_PA_DUMMY + SZ_4K,
+		.start = 0xe1800000,
+		.end   = 0xe1800000 + SZ_4K,
 		.flags = IORESOURCE_IRQ,
 	}
 };
