@@ -1,882 +1,1067 @@
-/* drivers/input/misc/mma7660.c
+/*
+ * mma7660.c
  *
- * Tri-axial acceleration sensor(BMA150) driver
- *
- * Copyright (C) 2008 LGE, Inc.
- *
- * This software is licensed under the terms of the GNU General Public
- * License version 2, as published by the Free Software Foundation, and
- * may be copied, distributed, and modified under those terms.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
+ * Copyright 2009 Freescale Semiconductor Inc. All Rights Reserved.
  */
 
+/*
+ * The code contained herein is licensed under the GNU General Public
+ * License. You may obtain a copy of the GNU General Public License
+ * Version 2 or later at the following locations:
+ *
+ * http://www.opensource.org/licenses/gpl-license.html
+ * http://www.gnu.org/copyleft/gpl.html
+ */
+#include <linux/autoconf.h>
+#include <linux/version.h>
 #include <linux/module.h>
-#include <linux/input.h>
-#include <linux/i2c.h>
-#include <linux/miscdevice.h>
-#include <linux/interrupt.h>
-#include <linux/platform_device.h>
-#include <linux/hrtimer.h>
+#include <linux/init.h>
+#include <linux/slab.h>
 #include <linux/mutex.h>
-#include <linux/ioctl.h>
-#include <asm/io.h>
-#include <linux/delay.h>//add to test //diyu@lge.com
-#include <asm/gpio.h>//add to test //diyu@lge.com
-#include <mach/vreg.h> //LGE_CHANGE [diyu@lge.com] To set vreg
-
-//#include <linux/bma150.h>
-//#define USE_HRTIMER
-#define __BMA150_H
-
-#define ACCEL_IO_TYPE	'B'
-
-#define ACCEL_IOC_ENABLE	_IO(ACCEL_IO_TYPE, 1)
-#define ACCEL_IOC_DISABLE	_IO(ACCEL_IO_TYPE, 2)
-#define ACCEL_IOCS_SAMPLERATE	_IOW(ACCEL_IO_TYPE, 3, int) /* in ms */
-#define ACCEL_IOCG_SAMPLERATE	_IO(ACCEL_IO_TYPE, 4) /* in ms */
+#include <linux/i2c.h>
+#include <linux/err.h>
+#include <linux/input-polldev.h>
+#include <linux/input.h>
+#include <linux/hwmon.h>
+#include <linux/irq.h>
+#include <linux/interrupt.h>
+#include <linux/workqueue.h>
 
 
-#define DUMP_REGS		1
-#define USE_IRQ			1
-#define DEF_SAMPLE_RATE		20000000 /* 20 ms */
-#if 1
-/* Miscellaneous device */
-#define MISC_DEV_NAME		"bma150" /*"mma7660"*/
-#else 
-/* Miscellaneous device */
-#define MISC_DEV_NAME		"mma7660"
-#endif
+#define MMA7660_I2C_ADDR	0x4C
+#define ONEGVALUE		21
+#define DEVICE_NAME		"mma7660"
+#define ABS_DEVICE_NAME		"mma7660abs"
+#define POLL_INTERVAL		20
+#define RES_BUFF_LEN		160
+#define ATKBD_SPECIAL		248
+#define	AXIS_MAX		(ONEGVALUE/2)
 
-/* BMA150 specific definitions */
-#define DEV_CHIP_ID		0x02
+#define ATKBD_SPECIAL		248
+#define LSB_G			32f/1.5f
 
-/* sensor IDs */
-#define EVENT_TYPE_ACCEL_X	ABS_X
-#define EVENT_TYPE_ACCEL_Y	ABS_Y
-#define EVENT_TYPE_ACCEL_Z	ABS_Z
-#define EVENT_TYPE_ACCLE_STATUS	ABS_WHEEL
+#define DRV_VERSION		"0.0.6"
 
-#define EVENT_TYPE_TEMPERATURE	ABS_THROTTLE
-
-#define ACCEL_THRES		9 /*10*/
-#define GPIO_MOTION_IRQ 49
-
-static int mma7660_enabled = 1; /*0*/
-
-static struct workqueue_struct *accelerometer_wq;
-
-struct mma7660_device {
-	struct i2c_client *client;
-	struct input_dev *input_dev;
-	struct work_struct work;
-#ifdef USE_HRTIMER
-	struct hrtimer timer;
-#endif
-	int coordinate[3];
-	int thres;
-	int use_irq;
-	int enabled;
-	int sample_rate;
+enum {
+	AXIS_DIR_X	= 0,
+	AXIS_DIR_X_N,
+	AXIS_DIR_Y,
+	AXIS_DIR_Y_N,
+	AXIS_DIR_Z,
+	AXIS_DIR_Z_N,
 };
 
-static void *_dev = NULL;
-
-static int  degree_xy[64] = {
-	0,
-	3  ,  5 , 8  , 11 , 14,
-	16 , 19 , 22 , 25 , 28,
-	31 , 34 , 38 , 41 , 45,
-	49 , 53 , 58 , 63 , 70,
-	80 , 90 , 95 , 100,  105 , 
-	110 , 115 , 120 , 125 , 130,
-	135 , -140 , -135 , -130 , -125,
-	-120 , -115 , -110 , -105 , -100,
-	-95 , -90, -80, -70, -63,
-	-58, -53 , -49, -45, -41,
-	-38, -34 , -31, -28, -25,
-	-22, -19 , -16, -14, -11,
-	-8,  -5  , -3
+enum {
+	SLIDER_X_UP	= 0,
+	SLIDER_X_DOWN	,
+	SLIDER_Y_UP	,
+	SLIDER_Y_DOWN	,
 };
 
- 
-//ARRAY_SIZE(multivalue_degree)
-static int  degree_z[64] = {
-  90,
-  87 , 85 ,  82,  79,  76,
-  74 , 71 ,  68,  65,  62,
-  59 , 56 ,  52,  49,  45,
-  41 , 37 ,  32,  27,  20,
-  10 , 0  ,  -5 ,  -10,   -15 , 
-  -20  , -25  ,  -30 ,  -35, -40  ,
-  -45  , 45  ,  40 ,  35,   30, 
-  25  , 20  ,  15 ,  10,   5, 
-  0  , -5  , -10, -20, -27,
- -32 , -37, -41, -45, -49,
- -52 , -56, -59, -62, -65,
- -68 , -71, -74, -77, -80,
- -82, -85 , -87
+static char *axis_dir[6] = {
+	[AXIS_DIR_X] 		= "x",
+	[AXIS_DIR_X_N] 		= "-x",
+	[AXIS_DIR_Y]		= "y",
+	[AXIS_DIR_Y_N]		= "-y",
+	[AXIS_DIR_Z]		= "z",
+	[AXIS_DIR_Z_N]		= "-z",
+};
+
+enum {
+	REG_XOUT = 0x00,
+	REG_YOUT,
+	REG_ZOUT,
+	REG_TILT,
+	REG_SRST,
+	REG_SPCNT,
+	REG_INTSU,
+	REG_MODE,
+	REG_SR,
+	REG_PDET,
+	REG_PD,
+	REG_END,
+};
+
+enum {
+	STANDBY_MODE = 0,
+	ACTIVE_MODE,
 };
 
 
+enum {
+	INT_1L_2P = 0,
+	INT_1P_2L,
+	INT_1SP_2P,
+};
 
-#if 0 /*DUMP_REGS*/
-static void dump_regs(void)
+struct mma7660_status {
+	u8 mode;
+	u8 ctl1;
+	u8 ctl2;
+	u8 axis_dir_x;
+	u8 axis_dir_y;
+	u8 axis_dir_z;
+	u8 slider_key[4];
+};
+
+
+static unsigned char atkbd_keycode[512] = {
+	  0, 67, 65, 63, 61, 59, 60, 88,  0, 68, 66, 64, 62, 15, 41,117,
+	  0, 56, 42, 93, 29, 16,  2,  0,  0,  0, 44, 31, 30, 17,  3,  0,
+	  0, 46, 45, 32, 18,  5,  4, 95,  0, 57, 47, 33, 20, 19,  6,183,
+	  0, 49, 48, 35, 34, 21,  7,184,  0,  0, 50, 36, 22,  8,  9,185,
+	  0, 51, 37, 23, 24, 11, 10,  0,  0, 52, 53, 38, 39, 25, 12,  0,
+	  0, 89, 40,  0, 26, 13,  0,  0, 58, 54, 28, 27,  0, 43,  0, 85,
+	  0, 86, 91, 90, 92,  0, 14, 94,  0, 79,124, 75, 71,121,  0,  0,
+	 82, 83, 80, 76, 77, 72,  1, 69, 87, 78, 81, 74, 55, 73, 70, 99,
+
+	  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+	217,100,255,  0, 97,165,  0,  0,156,  0,  0,  0,  0,  0,  0,125,
+	173,114,  0,113,  0,  0,  0,126,128,  0,  0,140,  0,  0,  0,127,
+	159,  0,115,  0,164,  0,  0,116,158,  0,172,166,  0,  0,  0,142,
+	157,  0,  0,  0,  0,  0,  0,  0,155,  0, 98,  0,  0,163,  0,  0,
+	226,  0,  0,  0,  0,  0,  0,  0,  0,255, 96,  0,  0,  0,143,  0,
+	  0,  0,  0,  0,  0,  0,  0,  0,  0,107,  0,105,102,  0,  0,112,
+	110,111,108,112,106,103,  0,119,  0,118,109,  0, 99,104,119,  0,
+
+	  0,  0,  0, 65, 99,
+};
+
+
+static ssize_t mma7660_show(struct device *dev,struct device_attribute *attr, char *buf);
+static ssize_t mma7660_store(struct device *dev,struct device_attribute *attr, const char *buf,size_t count);
+static int mma7660_suspend(struct i2c_client *client, pm_message_t state);
+static int mma7660_resume(struct i2c_client *client);
+#if 0
+static int mma7660_open(struct input_dev *dev);
+static int mma7660_close(struct input_dev *dev);
+#endif 
+static void mma7660_poll_work(struct work_struct *work);
+
+static struct i2c_driver mma7660_driver;
+static int mma7660_probe(struct i2c_client *client,const struct i2c_device_id *id);
+static int mma7660_remove(struct i2c_client *client);
+static int mma7660_detect(struct i2c_client *client, int kind, struct i2c_board_info *info);
+
+static const struct i2c_device_id mma7660_id[] = {
+	{"mma7660", 0 },
+	{ }
+};
+
+MODULE_DEVICE_TABLE(i2c, mma7660_id);
+
+static struct i2c_client 	*mma7660_client;
+static struct input_polled_dev 	*mma7660_idev;
+static struct input_dev		*mma7660_abs_dev;
+//static u8			mma_open = 0;
+static u8			mma_cal	= 0;
+static int 			debug = 0;
+//static int 			debug = 1;
+static int 			poll_int = POLL_INTERVAL;	
+static char			res_buff[RES_BUFF_LEN];
+static int 			emu_joystick = 0;
+
+static struct workqueue_struct *mma7660_workqueue;
+
+static DECLARE_WORK(mma7660_work, mma7660_poll_work);
+
+#undef DBG
+#define DBG(format, arg...) do { if (debug) printk(KERN_DEBUG "%s: " format "\n" , __FILE__ , ## arg); } while (0)
+//#define DBG //
+
+static unsigned short normal_i2c[] = {MMA7660_I2C_ADDR,I2C_CLIENT_END};
+
+I2C_CLIENT_INSMOD_1(mma7660);
+
+
+static struct i2c_driver mma7660_driver = {
+	.driver 	= {
+				.name = "mma7660",
+			},
+	.class		= I2C_CLASS_HWMON,
+	.probe		= mma7660_probe,
+	.remove		= mma7660_remove,
+	.id_table	= mma7660_id,
+	.detect		= mma7660_detect,
+	.address_data	= &addr_data,
+	.suspend 	= mma7660_suspend,
+	.resume 	= mma7660_resume,
+};
+
+static struct device_attribute mma7660_dev_attr = {
+	.attr 	= {
+		 .name = "mma7660_ctl",
+		 .mode = S_IRUGO | S_IWUGO,
+	},
+	.show 	= mma7660_show,
+	.store 	= mma7660_store,
+};
+
+static struct mma7660_status mma_status = {
+	.mode 		= 0,
+	.ctl1 		= 0,
+	.ctl2 		= 0,
+	.axis_dir_x	= AXIS_DIR_X,
+	.axis_dir_y	= AXIS_DIR_Y,
+	.axis_dir_z	= AXIS_DIR_Z,
+	.slider_key	= {0,0,0,0},
+};
+
+enum {
+	MMA_REG_R = 0,		/* read register 	*/
+	MMA_REG_W,		/* write register 	*/
+	MMA_DUMPREG,		/* dump registers	*/
+	MMA_REMAP_AXIS,		/* remap directiron of 3-axis	*/
+	MMA_DUMPAXIS,		/* dump current axis mapping	*/
+	MMA_ENJOYSTICK,		/* enable joystick	emulation	*/
+	MMA_DISJOYSTICK,	/* disable joystick emulation	*/
+	MMA_SLIDER_KEY,		/* set slider key		*/
+	MMA_DUMP_SLKEY,		/* dump slider key code setting	*/
+	MMA_CMD_MAX
+};
+
+static char *command[MMA_CMD_MAX] = {
+	[MMA_REG_R] 		= "readreg",
+	[MMA_REG_W] 		= "writereg",
+	[MMA_DUMPREG]		= "dumpreg",
+	[MMA_REMAP_AXIS]	= "remapaxis",
+	[MMA_DUMPAXIS]		= "dumpaxis",
+	[MMA_ENJOYSTICK]	= "enjoystick",
+	[MMA_DISJOYSTICK]	= "disjoystick",
+	[MMA_SLIDER_KEY]	= "sliderkey",
+	[MMA_DUMP_SLKEY]	= "dumpslkey",
+};
+s32 mma7660_Read_Alert(u8 RegAdd);
+
+s32 mma7660_Read_Alert(u8 RegAdd){
+	s32 res;
+
+ 	do{
+		res = i2c_smbus_read_byte_data(mma7660_client, RegAdd);
+		if (res < 0){
+			return res;
+		}
+ 	} while (res & 0x40);			// while Alert bit = 1;
+	
+	return res;
+}
+
+
+/* read sensor data from mma7660 */
+static int mma7660_read_data(short *x, short *y, short *z, short *tilt) {
+	u8	tmp_data[4];
+	s32	res;
+
+	res = (i2c_smbus_read_i2c_block_data(mma7660_client,REG_XOUT,REG_TILT-REG_XOUT,tmp_data) < REG_TILT-REG_XOUT);
+
+	if  (res < 0){
+		dev_err(&mma7660_client->dev, "i2c block read failed\n");
+			return res;
+	}
+
+	*x=tmp_data[0];
+	*y=tmp_data[1];
+	*z=tmp_data[2];
+	*tilt=tmp_data[3];
+
+	if (*x & 0x40){
+		res = mma7660_Read_Alert(REG_XOUT);
+		if (res < 0){
+			return res;
+		}
+		*x = res;
+	}
+
+	if (*y & 0x40){	
+		res = mma7660_Read_Alert(REG_YOUT);
+		if (res < 0){
+			return res;
+		}
+		*y = res;
+	}
+
+	if (*z & 0x40){	
+		res = mma7660_Read_Alert(REG_ZOUT);
+		if (res < 0){
+			return res;
+		}
+		*z = res;
+	}
+
+	if (*tilt * 0x40){
+		res = mma7660_Read_Alert(REG_TILT);
+		if (res < 0){
+			return res;
+		}
+		*tilt = res;
+	}
+
+	if (*x & 0x20) {	/* check for the bit 5 */
+		*x |= 0xffc0;
+	}
+
+	if (*y & 0x20) {	/* check for the bit 5 */
+		*y |= 0xffc0;
+	}
+
+	if (*z & 0x20) {	/* check for the bit 5 */
+		*z |= 0xffc0;
+	}
+
+	return 0;
+}
+
+
+/* parse command argument */
+static void parse_arg(const char *arg, int *reg, int *value)
 {
-	struct mma7660_device *dev = _dev;
-	int ret;
-	int i;
-	int retry;
-	/*temp1*///printk("\n\nCheck point : %s\n", __FUNCTION__);
+	const char *p;
 
-	if (NULL == dev)
+	for (p = arg;; p++) {
+		if (*p == ' ' || *p == '\0')
+			break;
+	}
+
+	p++;
+
+	*reg 	= simple_strtoul(arg, NULL, 16);
+	*value 	= simple_strtoul(p, NULL, 16);
+}
+
+static void cmd_read_reg(const char *arg)
+{
+	int reg, value, ret;
+
+	parse_arg(arg, &reg, &value);
+	ret = i2c_smbus_read_byte_data(mma7660_client, reg);
+	dev_info(&mma7660_client->dev, "read reg0x%x = %x\n", reg, ret);
+	sprintf(res_buff,"OK:read reg 0x%02x = 0x%02x\n",reg,ret);
+}
+
+/* write register command */
+static void cmd_write_reg(const char *arg)
+{
+	int reg, value, ret, modereg;
+
+	parse_arg(arg, &reg, &value);
+
+	modereg = i2c_smbus_read_byte_data(mma7660_client, REG_MODE);
+
+	ret = i2c_smbus_write_byte_data(mma7660_client, REG_MODE, modereg & (~0x01));
+	ret = i2c_smbus_write_byte_data(mma7660_client, reg, value);
+	ret = i2c_smbus_write_byte_data(mma7660_client, REG_MODE, modereg);
+
+	dev_info(&mma7660_client->dev, "write reg result %s\n",
+		 ret ? "failed" : "success");
+	sprintf(res_buff, "OK:write reg 0x%02x data 0x%02x result %s\n",reg,value,
+		 ret ? "failed" : "success");
+}
+
+/* dump register command */
+static void cmd_dumpreg(void) {
+	int reg,ret;
+
+	sprintf(res_buff,"OK:dumpreg result:\n");
+
+	for (reg = REG_XOUT; reg <= REG_END; reg++) {
+		ret = i2c_smbus_read_byte_data(mma7660_client, reg);
+		sprintf(&(res_buff[strlen(res_buff)]),"%02x ",ret);
+		if ((reg % 16) == 15) {
+			sprintf(&(res_buff[strlen(res_buff)]),"\n");
+		}
+	}
+
+	sprintf(&(res_buff[strlen(res_buff)]),"\n");
+}
+
+/* do the axis translation */
+static void remap_axis(short *rem_x,short *rem_y,short *rem_z,short x,short y,short z) {
+
+	switch (mma_status.axis_dir_x) {
+		case AXIS_DIR_X:
+			*rem_x		= x;
+			break;
+		case AXIS_DIR_X_N:
+			*rem_x		= -x;
+			break;
+		case AXIS_DIR_Y:
+			*rem_x		= y;
+			break;
+		case AXIS_DIR_Y_N:
+			*rem_x		= -y;
+			break;
+		case AXIS_DIR_Z:
+			*rem_x		= z;
+			break;
+		case AXIS_DIR_Z_N:
+			*rem_x		= -z;
+			break;
+	}
+	
+	switch (mma_status.axis_dir_y) {
+		case AXIS_DIR_X:
+			*rem_y		= x;
+			break;
+		case AXIS_DIR_X_N:
+			*rem_y		= -x;
+			break;
+		case AXIS_DIR_Y:
+			*rem_y		= y;
+			break;
+		case AXIS_DIR_Y_N:
+			*rem_y		= -y;
+			break;
+		case AXIS_DIR_Z:
+			*rem_y		= z;
+			break;
+		case AXIS_DIR_Z_N:
+			*rem_y		= -z;
+			break;
+	}
+	
+	switch (mma_status.axis_dir_z) {
+		case AXIS_DIR_X:
+			*rem_z		= x;
+			break;
+		case AXIS_DIR_X_N:
+			*rem_z		= -x;
+			break;
+		case AXIS_DIR_Y:
+			*rem_z		= y;
+			break;
+		case AXIS_DIR_Y_N:
+			*rem_z		= -y;
+			break;
+		case AXIS_DIR_Z:
+			*rem_z		= z;
+			break;
+		case AXIS_DIR_Z_N:
+			*rem_z		= -z;
+			break;
+	}
+}
+
+
+/* set the Zslider key mapping */
+static void cmd_sliderkey(const char *arg) 
+{
+	unsigned char key_code[4];
+	int i;
+	char *endptr,*p;
+
+	p = (char *)arg;
+
+	for ( i = 0; i < 4 ; i++ ) {
+		if (*p == '\0') {
+			break;
+		}
+
+		key_code[i] = (char)simple_strtoul(p,&endptr,16);
+		p = endptr +1;
+
+	}
+
+	if (i != 4) {
+		sprintf (res_buff,"FAIL:sliderkey command failed,only %d args provided\n",i);
+		DBG ("%s: Failed to set slider key, not enough key code in command\n",__FUNCTION__);
 		return;
-
-	dev_info(&dev->client->dev, "DUMP REGISTERS:\n");
-	for (i = 0x0; i < 0x16; i++) {
-		retry = 3;
-retry:
-		ret = i2c_smbus_read_byte_data(dev->client, i);
-		if (ret < 0 &&  retry <= 0) {
-			dev_err(&dev->client->dev, "i2c_smbus_read_byte_data(%x) failed\n", i);
-			continue;
-		}
-		else if (ret < 0 && retry > 0) {
-			retry--;
-			goto retry;
-		}
-		printk(KERN_INFO "   reg %02x => %02x\n", i, ret & 0xff);
 	}
+
+
+	DBG("%s: set slider key code  %02x %02x %02x %02x \n",__FUNCTION__,
+		key_code[0],key_code[1],key_code[2],key_code[3]);
+
+
+	for (i = 0; i < 4; i++) {
+		mma_status.slider_key[i] = key_code[i];
+	}
+
+	sprintf(res_buff,"OK:set slider key ok, key code %02x %02x %02x %02x \n",
+		key_code[0],key_code[1],key_code[2],key_code[3]);
 }
-#endif
 
-static unsigned char get_mode(struct i2c_client *client )
+/* remap the axis */
+static void cmd_remap_axis(const char *arg,size_t count) 
 {
+	int 	buff_len; 	
+	char	delimiters[] = " ,";
 
-	u8 v, v1,v2,v3,v4, output;
-    output = i2c_smbus_read_word_data( client,0x07);
+	char 	*token = NULL;
 	
-	v1 = (output& 0xff )& 0x03; /* MODE */
-	v2 = (output& 0xff )& 0x04; /* TON */
-	v3 = (output& 0xff )& 0x20; /* AWE */
-	v4 = (output& 0xff )& 0x80; /* ASE  */
+	int 	axis_cnt = 0;
+	u8	axis_map[3];
+	
+	if (count > 63) {
+		buff_len = 63;
+	} else {
+		buff_len = count;
+	}
 
-	
-	/* Front or Back */
-		switch(v1){
-			case 0x00: 
-				/*status*/printk("Unknown condition of front or back \n"); 
-				break;
-			case 0x01:
-				/*status*/printk("lying on its FRONT \n"); 
-				break;
-			case 0x10:
-				/*status*/printk("lying on its BACK \n"); 
+	while ((token = strsep((char **)&arg,delimiters)) != NULL) {
+
+		if (strcmp(token,"")) {
+			if (strcasecmp(token,"x") == 0) {
+				axis_map[axis_cnt] = AXIS_DIR_X;
+			} else if (strcasecmp(token,"-x") == 0) {
+				axis_map[axis_cnt] = AXIS_DIR_X_N;
+			} else if (strcasecmp(token,"y") == 0) {
+				axis_map[axis_cnt] = AXIS_DIR_Y;
+			} else if (strcasecmp(token,"-y") == 0) {
+				axis_map[axis_cnt] = AXIS_DIR_Y_N;
+			} else if (strcasecmp(token,"z") == 0) {
+				axis_map[axis_cnt] = AXIS_DIR_Z;
+			} else if (strcasecmp(token,"-z") == 0) {
+				axis_map[axis_cnt] = AXIS_DIR_Z_N;
+			} else {
+				sprintf (res_buff,"FAIL:remapaxis error,wrong argument\n");
+				return;
+			}
+
+			axis_cnt ++;
+
+			if (axis_cnt == 3) {
 				break;
 			}
-	
-		switch(v2){
-			case 0x000: 
-				/*status*/printk("Unknown up/down/left/right \n"); 
-				break;
-			case 0x001:
-				/*status*/printk("LEFT \n"); 
-				break;
-			case 0x010:
-				/*status*/printk("RIGHT \n"); 
-				break;
-			case 0x101:
-				/*status*/printk("DOWN \n"); 
-				break;
-			case 0x110:
-				/*status*/printk("UP \n"); 
-				break;
-			
-			}
-			
-		switch(v3){
-			case 0x0: 
-				/*status*/printk( "NOT pulse  \n"); 
-				break;
-			case 0x1:
-				/*status*/printk("Equipment has not detected a pulse \n"); 
-				break;
 		}
-	
-		switch(v4){
-			case 0x0: 
-				/*status*/printk("NOT Shaking"); 
-				break;
-			case 0x1:
-				/*status*/printk("shaking"); 
-				break;
+	}
+
+	if (axis_cnt != 3) {
+		sprintf(res_buff,"FAIL:remapaxis error, not enough parameters(%d)\n",axis_cnt);
+		return;
+	}
+
+
+	if (((axis_map[0] & 0xfe) == (axis_map[1] & 0xfe)) || 
+		((axis_map[0] & 0xfe) == (axis_map[2] & 0xfe)) ||
+		((axis_map[2] & 0xfe) == (axis_map[1] & 0xfe))) {
+
+		sprintf(res_buff,"FAIL:remapaxis error, duplicate axis mapping\n");
+		return;
+	}
+
+
+	mma_status.axis_dir_x	= axis_map[0];
+	mma_status.axis_dir_y	= axis_map[1];
+	mma_status.axis_dir_z	= axis_map[2];
+
+	sprintf(res_buff,"OK:remapaxis ok, new mapping : %s %s %s\n",axis_dir[mma_status.axis_dir_x],
+		axis_dir[mma_status.axis_dir_y],axis_dir[mma_status.axis_dir_z]);
+}
+
+/* parse the command passed into driver, and execute it */
+static int exec_command(const char *buf, size_t count)
+{
+	const char *p, *s;
+	const char *arg;
+	int i, value = 0;
+
+	for (p = buf;; p++) {
+		if (*p == ' ' || *p == '\0' || p - buf >= count)
+			break;
+	}
+	arg = p + 1;
+
+	for (i = MMA_REG_R; i < MMA_CMD_MAX; i++) {
+		s = command[i];
+		if (s && !strncmp(buf, s, p - buf - 1)) {
+			dev_info(&mma7660_client->dev, "command %s\n", s);
+			goto mma_exec_command;
 		}
-	
-		return output;
+	}
+
+	dev_err(&mma7660_client->dev, "command not found\n");
+	sprintf(res_buff,"FAIL:command [%s] not found\n",s);
+	return -1;
+
+mma_exec_command:
+	if (i != MMA_REG_R && i != MMA_REG_W)
+		value = simple_strtoul(arg, NULL, 16);
+
+	switch (i) {
+	case MMA_REG_R:
+		cmd_read_reg(arg);
+		break;
+	case MMA_REG_W:
+		cmd_write_reg(arg);
+		break;
+	case MMA_DUMPREG:		/* dump registers	*/
+		cmd_dumpreg();
+		break;
+	case MMA_REMAP_AXIS:		/* remap 3 axis's direction	*/
+		cmd_remap_axis(arg,(count - (arg - buf)));
+		break;
+	case MMA_DUMPAXIS:		/* remap 3 axis's direction	*/
+		sprintf(res_buff,"OK:dumpaxis : %s %s %s\n",axis_dir[mma_status.axis_dir_x],
+			axis_dir[mma_status.axis_dir_y],axis_dir[mma_status.axis_dir_z]);
+		break;
+	case MMA_ENJOYSTICK: 
+		emu_joystick = 1;
+		sprintf(res_buff,"OK:joystick movement emulation enabled\n");
+		break;
+	case MMA_DISJOYSTICK:
+		emu_joystick = 0;
+		sprintf(res_buff,"OK:joystick movement emulation disabled\n");
+		break;
+	case MMA_SLIDER_KEY:		/* load offset drift registers	*/
+		cmd_sliderkey(arg);
+		break;
+	case MMA_DUMP_SLKEY:
+		sprintf(res_buff,"OK:dumpslkey 0x%02x 0x%02x 0x%02x 0x%02x\n",mma_status.slider_key[0],
+			mma_status.slider_key[1],mma_status.slider_key[2],mma_status.slider_key[3]);
+		break;
+	default:
+		dev_err(&mma7660_client->dev, "command is not found\n");
+		sprintf (res_buff,"FAIL:no such command %d\n",i);
+		break;
+	}
+
+	return 0;
+}
+
+/* show the command result */
+static ssize_t mma7660_show(struct device *dev,
+			    struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf,"%s",res_buff);
+}
+
+/* accept the command */
+static ssize_t mma7660_store(struct device *dev,struct device_attribute *attr, 
+		const char *buf,size_t count)
+{
+	exec_command(buf, count);
+
+	return count;
 }
 
 
-static inline int get_tilt_status(struct i2c_client *client )
-{
-	int ret, direction;
-	u8 v, v1,v2,v3,v4, output;
-	
-	/*temp1*///printk("\n\nCheck point : %s\n", __FUNCTION__);
-	
-	output = i2c_smbus_read_word_data(client,0x03);
-	v = (output& 0xff )& 0x40; /* Alert to check*/
-	if ( v ==1 ) {
-		dev_err(&client->dev, "i2c_smbus_read_word_data failed\n");
-		return -EIO;
-	}else{
-		output = i2c_smbus_read_word_data(client,0x03);
-	}
-	
-	v1 = (output& 0xff )& 0x03; /* Front or Back */
-	v2 = (output& 0xff )& 0x1c; /* Up or Down or Left or Right*/
-	v3 = (output& 0xff )& 0x20; /* Pulse Read*/
-	v4 = (output& 0xff )& 0x80; /* Shake Read */
+typedef enum {NOSLIDE, UPWARD, DOWNWARD} SLIDEOUT;
 
-	/* Front or Back */
-	switch(v1){
-		case 0x00: 
-			/*status*/printk("Unknown condition of front or back \n"); 
-		    break;
-		case 0x01:
-			/*status*/printk("lying on its FRONT \n"); 
-		    break;
-		case 0x10:
-			/*status*/printk("lying on its BACK \n"); 
-		    break;
-		}
+#define NOSLIDE		0
+#define SLIDEUPWARD	1
+#define SLIDEUPWARD2	2
+#define SLIDEDOWNWARD 	3
+#define SLIDEDOWNWARD2	4
 
-	switch(v2){
-		case 0x000: 
-			/*status*/printk("Unknown up/down/left/right \n"); 
-		    break;
-		case 0x001:
-			/*status*/printk("LEFT \n"); 
-		    break;
-		case 0x010:
-			/*status*/printk("RIGHT \n"); 
-		    break;
-		case 0x101:
-			/*status*/printk("DOWN \n"); 
-		    break;
-		case 0x110:
-			/*status*/printk("UP \n"); 
-		    break;
-		
-		}
-		
-	switch(v3){
-		case 0x0: 
-			/*status*/printk( "NOT pulse  \n"); 
-		    break;
-		case 0x1:
-			/*status*/printk("Equipment has not detected a pulse \n"); 
-		    break;
-	}
+#define MAXSLIDEWIDTH 	10
+#define SLIDERAVCOUNT 	4
 
-	switch(v4){
-		case 0x0: 
-			/*status*/printk("NOT Shaking"); 
-		    break;
-		case 0x1:
-			/*status*/printk("shaking"); 
-		    break;
-	}
+#define SLIDE_THR	16
+#define SLIDE_THR2	(36)
 
-	return ret;
-}
-#if 0 
-static ssize_t acc_xyz_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	//struct i2c_dev *i2c_dev = i2c_dev_get_by_minor(MINOR(dev->devt));
-	//struct bma150_device *dev= i2c_dev_get_by_minor(MINOR(dev->devt));
-	int c[3];
-	int d, i;
-	u8	v[]={0x00, 0x01, 0x02};
+struct slider {
+	int 		wave[SLIDERAVCOUNT];	/* for long term average */
+	unsigned char	wave_idx;
+	short		ref;
+	unsigned char 	dir;
+	unsigned char	report;
+	unsigned char 	mode;
+	unsigned char	cnt;	
+};
 
-	for (i = 0; i < 3; i++) {
-		
-		c[i] = get_acc_xyz(dev->client, v[i] );/*x, y, z -axis output*/
-	}	
+static struct slider zsl_x,zsl_y,zsl_z;
 
-	return sprintf(buf, "%d\n", c);
-}
-#endif
-
-//static DEVICE_ATTR(enable, S_IRUGO | S_IWUSR, vibrator_enable_show, vibrator_enable_store);
-//static DEVICE_ATTR(acc_xyz, S_IRUGO | S_IWUSR, acc_xyz_show, NULL);
-#if 1
-
-static inline int get_acc_xyz(struct i2c_client *client, u8 command)
-{
-	int ret, direction;
-	u8 v, output;
-	
-	/*temp1*/printk("\n\nCheck point : %s\n", __FUNCTION__);
-	
-	#if 1
-	/*LGE_CHANGE_S: diYu@lge.com*/
-	/*This is x or y or z -axis to read*/
-	output = i2c_smbus_read_word_data(client,command);
-	if (output < 0) {
-		dev_err(&client->dev, "i2c_smbus_read_word_data failed\n");
-		return -EIO;
-	}
-	#if 0
-	if (ret < 0) {
-		dev_err(&client->dev, "i2c_smbus_read_word_data failed\n");
-		return -EIO;
-	}
-	#endif 
-	v = (output& 0xff )& 0x7f; /* Alert + XOUT[5]+ XOUT[4]+ XOUT[3]+ XOUT[2]+ XOUT[1]+ XOUT[0] */
-	/*temp3*///printk("Get_acc_xyz ret1 : axis %x (%d)\n", output, output);
-
-	if( (v & 0x20) == 0x20){
-		direction = -1; 	
-		ret = (int)( (~v & 0x3f) + 0x01 ) * (-1);
-		/*temp3*////printk(" -1 : %08x (%08x)\n", v,  ret );
-	}else if( (v & 0x20) == 0x00){
-		direction = 1; 
-		ret = (int)(v & 0x3f );
-		/*temp3*///printk("  1 : %08x (%08x)\n", v,  ret );
-	}
-	//output = i2c_smbus_read_word_data(client, 0x03);
-	
-	/*temp3*///printk("0x03 : %x (%d)\n", output,  output );
-	
-	/*LGE_CHANGE_E: diYu@lge.com*/	
-	#endif 
-	return ret;
-}
-#endif
-
-static void mma7660_work_func(struct work_struct *work)
-{
-	struct mma7660_device *dev = container_of(work, struct mma7660_device, work);
+/* check for the zslider event */
+static int zslider(struct slider *slider, short axis) {
 	int i;
-	int c[3];
-	int d;
-	int mtrans;
-	int do_report = 0;
-	/*temp1*///printk("\n\nCheck point : %s\n", __FUNCTION__);
-	u8	v[]={0x00, 0x01, 0x02};
+	short average = 0;	
 
-	for (i = 0; i < 3; i++) {
-		
-		c[i] = get_acc_xyz(dev->client, v[i] );/*x, y, z -axis output*/
-		#if 1
-		#if 0
-		if (c[i] < 0)
-			return;
+	slider->wave[slider->wave_idx] 	= axis;
 
-		c[i] -= 0x200;
-		#endif
-		d = dev->coordinate[i] - c[i];
-		
-		if (d < 0) d = -d;
-				
-		if (d >= dev->thres){
-			do_report = 1;
-		}		
-		#endif
-	}	
+	for (i = 0; i < SLIDERAVCOUNT; i++) 
+		average += slider->wave[i];
 
-	/*temp3*///printk("diyu Accelometer- c1: %d, c2: %d, c3: %d \n", c[0], c[1], c[2]);
-	if (do_report) {
+	average /= SLIDERAVCOUNT;
 
-		for (i = 0; i < 3; i++) {
-			//input_report_abs(dev->input_dev, ABS_X+i, c[i]);
-			//input_report_abs(dev->input_dev, ABS_RX+i, c[i]);\
-			mtrans = c[i]
-			if(c[i]<0){
-				mtrans = 64 + c[i];
-			}else
-				mtrans = c[i];
+	switch (slider->mode) {
+		case 0:
+			if (slider->wave_idx == (SLIDERAVCOUNT - 1)) 
+				slider->mode = 1;
+			break;
+		case 1:
+			if (axis > (average + SLIDE_THR)) {	/* slide up trigger 		*/
+				slider->dir	= SLIDEUPWARD;
+				slider->mode 	= 2;
+				slider->cnt	= MAXSLIDEWIDTH;
+				slider->ref	= average;
+			} else if (axis < (average - SLIDE_THR)) {	/* slide down trigger 		*/
+				slider->dir	= SLIDEDOWNWARD;
+				slider->mode 	= 2;
+				slider->cnt	= MAXSLIDEWIDTH;
+				slider->ref	= average;
+			}
+			slider->report = NOSLIDE;
+			break;
+		case 2: 
+			slider->cnt--;
 
-				
-			//ret = i2c_smbus_read_byte_data(client, 0x00);
-#if 1
-			if(i == 0) /*x*/
-				input_report_abs(dev->input_dev, ABS_RX+i, degree_xy[mtrans]);
-			if(i == 1) /*y*/
-				input_report_abs(dev->input_dev, ABS_RX+i, -degree_xy[mtrans]);
-			if(i == 2) /*z*/
-				input_report_abs(dev->input_dev, ABS_RX+i,  degree_z[mtrans]);
-#endif
-						
-			#if 0 
-			if(i==2)/*z-axis*/
-				input_report_abs(dev->input_dev, ABS_RX+0, c[i]);
-			if(i==0)/*x-axis*/
-				input_report_abs(dev->input_dev, ABS_RX+1, c[i]);
-			if(i==1)/*y-axis*/
-				input_report_abs(dev->input_dev, ABS_RX+2, c[i]);
-			#endif 
-		}
-		input_sync(dev->input_dev);
-		
+			if (!slider->cnt) {				/* return to normal */
+				slider->mode	= 1; 	
+				slider->dir	= NOSLIDE;
+				break;
+			}
 
-		for (i = 0; i < 3; i++) {
-			dev->coordinate[i] = c[i];
-		}
-		//printk("diyu  dev->client->dev (x, y ,z) = (%d, %d, %d)\n", c[0], c[1], c[2]);
+			if ((axis < (slider->ref + SLIDE_THR)) && (axis > (slider->ref - SLIDE_THR)) && (slider->cnt < MAXSLIDEWIDTH-2)) {
+/* report the slide event */
+				switch (slider->dir) {
+					case SLIDEUPWARD:
+						DBG("slide upward\n");
+						break;
+					case SLIDEDOWNWARD:
+						DBG("slide downward\n");
+						break;
+				}
 
-		//dev_info(&dev->client->dev, "diyu (x, y ,z) = (%d, %d, %d)\n", c[0], c[1], c[2]);
-	}
-
-	if (dev->use_irq){
-		//printk("- \n");
-		enable_irq(dev->client->irq);
-	}
-}
-
-
-#ifdef USE_HRTIMER
-static enum hrtimer_restart mma7660_timer_func(struct hrtimer *timer)
-{
-	struct mma7660_device *dev = container_of(timer, struct mma7660_device, timer);
-	/*temp1*/printk("\n\nCheck point : %s\n", __FUNCTION__);
-
-	if (dev->enabled) {
-		queue_work(accelerometer_wq, &dev->work);
-		hrtimer_start(&dev->timer, ktime_set(0, dev->sample_rate), HRTIMER_MODE_REL);
-		//printk(" %s dev->sample_rate:  %d \n", __FUNCTION__, dev->sample_rate);
-	}
-	return HRTIMER_NORESTART;
-}
-#endif
-
-static int mma7660_open(struct inode *inode, struct file *filp)
-{
-	/*temp1*///printk("\n\nCheck point : %s\n", __FUNCTION__);
-	return 0;
-}
-
-static int mma7660_release(struct inode *inode, struct file *filp)
-{
-	/*temp1*///printk("\n\nCheck point : %s\n", __FUNCTION__);
-
-	return 0;
-}
-
-static int mma7660_ioctl(struct inode *inode, struct file *filp, 
-		unsigned int cmd, unsigned long arg)
-{
-	struct mma7660_device *dev = (struct mma7660_device *)_dev;
-	/*temp1*///printk("\n\nCheck point : %s-1\n", __FUNCTION__);
-	if (NULL == dev)
-		return -ENODEV;
-#if 1
-	switch (cmd) {
-		case ACCEL_IOC_ENABLE:
-			if (!dev->enabled) {
-				dev->enabled = 1;
-	#ifdef USE_HRTIMER
-				/*T*///printk("\n\nCheck point : %s-2\n", __FUNCTION__);
-				/*hrtimer_start(&dev->timer, 
-						ktime_set(0, dev->sample_rate), 
-						HRTIMER_MODE_REL);*/
-	#endif
+				slider->mode 	= 3;
+				slider->cnt	= 5;    		/* add additonal delay */
+				slider->report	= slider->dir; 
 			}
 			break;
-		case ACCEL_IOC_DISABLE:
-			if (dev->enabled)
-				dev->enabled = 0;
-			/*T*///printk("\n\nCheck point : %s-3\n", __FUNCTION__);
-			break;
-		case ACCEL_IOCS_SAMPLERATE:
-			if (arg < 10)
-				return -EINVAL;
-			dev->sample_rate = arg * NSEC_PER_MSEC; /* in ns */
-			/*T*///printk("\n\nCheck point : %s-4\n", __FUNCTION__);
-			break;
-		case ACCEL_IOCG_SAMPLERATE:
-			/*T*///printk("\n\nCheck point : %s-5\n", __FUNCTION__);
-			return do_div(dev->sample_rate, NSEC_PER_MSEC);
+
+		case 3:
+			slider->report = NOSLIDE;
+			slider->cnt --;
+			if (!slider->cnt) {
+				slider->mode = 1;
+			}
 			break;
 		default:
-			return -ENOTTY;
+			break;
 	}
-#endif
+
+	slider->wave_idx++;
+	if (slider->wave_idx == SLIDERAVCOUNT) 
+		slider->wave_idx=0;
+
+        return slider->report;
+}
+
+/* workqueue function to poll mma7660 data */
+static void mma7660_poll_work(struct work_struct *work)  
+{
+	short 	x,y,z,tilt;
+	short 	x_remap,y_remap,z_remap;
+	u8 	zslide_x,zslide_y;
+//	int	swing;
+
+	if (mma7660_read_data(&x,&y,&z,&tilt) != 0) {
+		DBG("mma7660 data read failed\n");
+		return;
+	}
+
+/* report the absulate sensor data to input device */
+	input_report_abs(mma7660_abs_dev, ABS_X, x);	
+	input_report_abs(mma7660_abs_dev, ABS_Y, y);	
+	input_report_abs(mma7660_abs_dev, ABS_Z, z);
+	input_report_abs(mma7660_abs_dev, ABS_MISC, tilt);
+	input_sync(mma7660_abs_dev);
+
+	remap_axis(&x_remap,&y_remap,&z_remap,x,y,z);
+
+/* report joystick movement */
+
+	if (emu_joystick)  {	
+		input_report_abs(mma7660_idev->input, ABS_X, x_remap);
+		input_report_abs(mma7660_idev->input, ABS_Y, y_remap);
+		input_report_abs(mma7660_idev->input, ABS_Z, z_remap-ONEGVALUE);
+		input_sync(mma7660_idev->input);
+	}
+
+
+/* check the zslider event */
+
+	zslide_x 	= zslider(&zsl_x,x_remap);
+	zslide_y	= zslider(&zsl_y,y_remap);
+	
+	switch (zslide_x) {
+		case SLIDEUPWARD: 
+			DBG("X report slide upward \n");
+			if (mma_status.slider_key[SLIDER_X_UP]) {
+				input_report_key(mma7660_idev->input, mma_status.slider_key[SLIDER_X_UP], 1);
+				input_report_key(mma7660_idev->input, mma_status.slider_key[SLIDER_X_UP], 0);
+			}
+			break;
+		case SLIDEDOWNWARD:
+			DBG("X report slide downward \n");
+			if (mma_status.slider_key[SLIDER_X_DOWN]) {
+				input_report_key(mma7660_idev->input, mma_status.slider_key[SLIDER_X_DOWN], 1);
+				input_report_key(mma7660_idev->input, mma_status.slider_key[SLIDER_X_DOWN], 0);
+			}
+			break;
+	}
+	
+	switch (zslide_y) {
+		case SLIDEUPWARD: 
+			DBG("Y report slide upward \n");
+			if (mma_status.slider_key[SLIDER_Y_UP]) {
+				input_report_key(mma7660_idev->input, mma_status.slider_key[SLIDER_Y_UP], 1);
+				input_report_key(mma7660_idev->input, mma_status.slider_key[SLIDER_Y_UP], 0);
+			}
+			break;
+		case SLIDEDOWNWARD:
+			DBG("Y report slide downward \n");
+			if (mma_status.slider_key[SLIDER_Y_DOWN]) {
+				input_report_key(mma7660_idev->input, mma_status.slider_key[SLIDER_Y_DOWN], 1);
+				input_report_key(mma7660_idev->input, mma_status.slider_key[SLIDER_Y_DOWN], 0);
+			}
+			break;
+	}
+	
+
+	if ((zslide_x) || (zslide_y)) {
+		input_sync(mma7660_idev->input);
+	};
+
+	return;
+
+}
+
+ 
+/* polling callback function of input polled device */
+static void mma7660_dev_poll(struct input_polled_dev *dev)
+{
+	if (mma_cal) {
+		DBG("mma7660 is now doing calibration\n");
+		return;
+	}
+
+/* Since the the data reading would take a long time, 
+   schedule the real work to a workqueue */
+	queue_work(mma7660_workqueue, &mma7660_work);
+	return;
+}
+
+#if 0
+static int mma7660_open(struct input_dev *dev) {
+	mma_open = 1;
+
+/* init slider structure */
+
+	DBG("mma7660_open() called\n");
+/* reset the zslider structure */
+	memset(&zsl_x,0,sizeof(struct slider));
+	memset(&zsl_y,0,sizeof(struct slider));
+	memset(&zsl_z,0,sizeof(struct slider));
 
 	return 0;
 }
 
-/* use miscdevice for ioctls */
-static struct file_operations fops = {
-	.owner   = THIS_MODULE,
-	.open    = mma7660_open,
-	.release = mma7660_release,
-	.ioctl   = mma7660_ioctl,
-};
+static int mma7660_close(struct input_dev *dev) {
+	mma_open = 0;
+	return 0;
+}
 
-static struct miscdevice misc_dev = {
-	.minor = MISC_DYNAMIC_MINOR,
-	.name  = MISC_DEV_NAME,
-	.fops  = &fops,
-};
-
-static int mma7660_init_chip(struct i2c_client *client)
-{
-#define BMA_ANY_MOTION_THRES	5
-	int ret;
-	u8 v;
-	int ntest=0;
-	/*temp1*///printk("\n\n==========Check point++ : %s=========\n", __FUNCTION__);
-
-	//ret = i2c_smbus_read_byte_data(client, 0x00);
-	/*LGE_CHANGE_S: diYu@lge.com*/
-	//Standby Mode
-	#if 1
-	// $00, $01, $02 : X, Y, Z output value register  :
-	// $03               : Tilt register  : read only
-	// $04               : Sampling Rate Status :(Read only)// $05 		     : Sleep Count Register    :(Read/Write)
-	// $06 		     : Interrupt Setup 
-	// $07: Mode register  : IAH IPP SCPS  ASE AWE TON X  MODE  : 1011 10 X1 (0xB9)
- 	v = 0x00 & 0xff;
-	ret =  i2c_smbus_write_byte_data(client, 0x07, v);
-
-	// $06: Interrupt Setup  :SHINTX: SHINTY: SHINTZ: GINT:  ASINT: PDINT: PLINT: FBINT 
-	//	v = 0xff & 0xff;
-	v = 0x03 & 0xff;
-	/*T*///printk("2-3: v %08x \n", v);
-	ret =  i2c_smbus_write_byte_data(client, 0x06, v);
-	/*T*///printk("2-1: write ret %08x \n", ret );
-	
-
-	// $08: Auto-Wake and Active Mode Portrait/Landscape  : FILT AWSR AMSR : 001 00 000
-	v = 0x20 & 0xff;
-	/*T*///printk("2-3: v %08x \n", v);
-	ret =  i2c_smbus_write_byte_data(client, 0x08, v);
-	/*T*///printk("2-2: write ret %08x \n", ret );
-
-	
-	// $07: Mode register  : IAH IPP SCPS  ASE AWE TON X  MODE  : 1011 10 X1 (0xB9)
-	v = 0x49 & 0xff;
-	/*T*///printk("2-3: v %08x \n", v);
-	ret =  i2c_smbus_write_byte_data(client, 0x07, v);
-	/*T*///printk("2-3: write ret %08x \n", ret );
-	#endif
-	
-	#if 0 /*DUMP_REGS*/
-	dump_regs();
-	#endif
-	while(ntest++< 100)
-{
-		ret = i2c_smbus_read_byte_data(client, 0x00);
-		/*T*///printk("3: ret %08x (%d)\n", ret,ret);
-		}
-	/*T*///printk("\n============ Check point : %s=============\n", __FUNCTION__);
-#if 0 //++source before used
-	/* set range as +/- 2g and bandwidth as 190 Hz */
-	
 #endif 
-	/* set any_motion threshold */
-	
-#if 0	
-	/* set any_motion_dur as 3 */
-	
-	/* enable adv_INT */
-	
-	/* enable any_motion */
-	
-#endif //--source before used
-	return 0;
+/* detecting mma7660 chip */
+static int mma7660_detect(struct i2c_client *client, int kind, struct i2c_board_info *info) {
+        struct i2c_adapter *adapter = client->adapter;
+
+        if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_BYTE
+                                     | I2C_FUNC_SMBUS_WRITE_BYTE_DATA))
+                return -ENODEV;                                        
+
+       strlcpy(info->type, "mma7660", I2C_NAME_SIZE);
+
+        return 0;
 }
 
-static int mma7660_probe_chip(struct i2c_client *client)
-{
-	int ret;
-	u8 v;
+static int mma7660_probe(struct i2c_client *client,const struct i2c_device_id *id) {
+	struct input_dev 	*idev;
+	int 			rc; 
+	int 			ret;
+	int 			i;
 
-    /*T*///printk("\n\n %s \n", __FUNCTION__);\
-//	ret = cam_i2c_read_byte(0, 0x2F, client); //
-    //0x0000101
-    #if 0
-	v = 0x01 & 0xff;
-	ret =  i2c_smbus_write_byte_data(client, 0x07, v);
-	printk("\n\n2-1 write ret %08x (%d)\n", ret,ret);
-	ret = i2c_smbus_read_byte_data(client, 0x00); /* read the chip id *//*original*/
-	if (ret < 0) {
-		dev_err(&client->dev, "i2c_smbus_read_byte_data failed\n");
-		return -EIO;
-	}
-	dev_info(&client->dev, "chip version %02x\n", (ret & 0xff));
-	#endif 
+	printk(KERN_INFO "try to detect mma7455 chip id %02x\n",client->addr);
+	mma7660_workqueue = create_singlethread_workqueue("mma7660");
+        if (!mma7660_workqueue) {
+	        return -ENOMEM; /* most expected reason */
+        }
 
-#if 0 /*++test */
-	if (DEV_CHIP_ID != (ret & 0x7)) {
-		dev_info(&client->dev, "unknown chip %x\n", (ret & 0x7));
-		return -ENODEV;
-	}
+	printk(KERN_INFO "1 try to create file\n");
 
-	ret = i2c_smbus_read_byte_data(client, 0x01); /* read the version */
-	if (ret < 0) {
-		dev_err(&client->dev, "i2c_smbus_read_byte_data failed\n");
-		return -EIO;
-	}
-	dev_info(&client->dev, "chip version %02x\n", (ret & 0xff));
-#endif /*--test */ 	
-	ret = mma7660_init_chip(client);
 
-	return ret;
-}
+	mma7660_client = client;
 
-static int mma7660_irq_handler(int irq, void *dev_id)
-{
-	struct mma7660_device *dev = dev_id;
-	/*temp1*///printk("\n\nCheck point : %s\n", __FUNCTION__);
-	disable_irq(dev->client->irq);
-	queue_work(accelerometer_wq, &dev->work);
-	return IRQ_HANDLED;
-}
+	printk(KERN_INFO "2 try to create file\n");
 
-static int mma7660_probe(struct i2c_client *client)
-{
-	int ret;
-	struct mma7660_device *dev;
-	struct input_dev *input_dev;
-	struct vreg *vreg_touch;
-	int rc = -1;
-		
-	vreg_touch = vreg_get(0, "synt");
-	vreg_enable(vreg_touch);
-	rc = vreg_set_level(vreg_touch, 2800);
-	if (rc != 0) {
-		printk("diyu vreg_touch failed\n");
-		return -1;
-	}
-
-	/*temp1*///printk("\n\nCheck point : %s\n", __FUNCTION__);
-	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
-		dev_err(&client->dev, "need I2C_FUNC_I2C\n");
-		ret = -ENODEV;
-		goto err_check_functionality;
-	}
-
-	ret = mma7660_probe_chip(client);
-	if (ret) 
-		goto err_probe_chip;
-
-	dev = kzalloc(sizeof(struct mma7660_device), GFP_KERNEL);
-	if (NULL == dev) {
-		ret = -ENOMEM;
-		goto err_alloc_data;
-	}
-	_dev = dev; /* for miscdevice */
-	INIT_WORK(&dev->work, mma7660_work_func);
-	dev->client = client;
-	dev->use_irq = USE_IRQ;
-//	dev->client->irq = GPIO_MOTION_IRQ ;//Do Not need. To assign at board_adam_gpio_i2c.c
-	dev->thres = ACCEL_THRES;
-	dev->sample_rate = DEF_SAMPLE_RATE;
-	dev->enabled = mma7660_enabled;
-	i2c_set_clientdata(client, dev);
-
-#if 0 /*DUMP_REGS*/
-	dump_regs();
-#endif
-
-	ret = misc_register(&misc_dev);
+/* create device file in sysfs as user interface */
+	ret = device_create_file(&client->dev, &mma7660_dev_attr);
+	printk(KERN_INFO "create file\n");
 	if (ret) {
-		dev_err(&client->dev, "failed to register miscdevice\n");
-		goto err_miscdevice;
+		printk(KERN_INFO "create file failed\n");	
+		dev_err(&client->dev, "create device file failed!\n");
+		rc = -EINVAL;
+		goto err_detach_client;
 	}
 
-	dev->input_dev = input_allocate_device();
-	if (NULL == dev->input_dev) {
-		ret = -ENOMEM;
-		dev_err(&client->dev, "failed to allocate input device\n");
-		goto err_input_allocate_device;
+	printk(KERN_INFO "3 try to create file\n");
+
+
+/* allocate & register input polling device  */
+	mma7660_idev = input_allocate_polled_device();
+	if (!mma7660_idev) {
+		dev_err(&client->dev, "allocate poll device failed!\n");
+		rc = -ENOMEM;
+		goto err_free_input;
 	}
-	input_dev = dev->input_dev;
-	input_dev->name = "accelerometer";
-	set_bit(EV_SYN, input_dev->evbit);
-	set_bit(EV_ABS, input_dev->evbit);
-	/* TODO: input_set_abs_params() */
-	input_set_abs_params(input_dev, ABS_X, -32, 31, 0, 0); /*512, 511, 0, 0);*/
-	input_set_abs_params(input_dev, ABS_Y, -32, 31, 0, 0); /*512, 511, 0, 0);*/
-	input_set_abs_params(input_dev, ABS_Z, -32, 31, 0, 0); /*512, 511, 0, 0);*/
 
-	/*yaw*/
-	input_set_abs_params(input_dev, ABS_RX, -90, 90, 0, 0); /*512, 511, 0, 0);*/
-	/*pitch*/
-	input_set_abs_params(input_dev, ABS_RY, -90, 90, 0, 0); /*512, 511, 0, 0);*/
-	/*roll*/
-	input_set_abs_params(input_dev, ABS_RZ, -90, 90, 0, 0); 
-	
-	input_set_abs_params(input_dev, ABS_WHEEL, 0, 255, 0, 0);
-	input_set_abs_params(input_dev, ABS_THROTTLE, 0, 255, 0, 0);
+	mma7660_abs_dev = input_allocate_device();
 
-	ret = input_register_device(input_dev);
+	if (!mma7660_abs_dev) {
+		dev_err(&client->dev, "allocate poll device failed!\n");
+		rc = -ENOMEM;
+		goto err_free_abs;
+	}
+
+
+	mma7660_idev->poll 		= mma7660_dev_poll;
+	mma7660_idev->poll_interval 	= poll_int ;
+
+	idev 			= mma7660_idev->input;
+	idev->name 		= DEVICE_NAME;
+	idev->id.bustype 	= BUS_I2C;
+	idev->dev.parent 	= &client->dev;
+
+	set_bit(EV_REL,idev->evbit);
+	set_bit(EV_KEY,idev->evbit);
+
+	input_set_abs_params(mma7660_idev->input, ABS_X, -AXIS_MAX, AXIS_MAX, 0, 0);
+	input_set_abs_params(mma7660_idev->input, ABS_Y, -AXIS_MAX, AXIS_MAX, 0, 0);
+	input_set_abs_params(mma7660_idev->input, ABS_Z, -AXIS_MAX, AXIS_MAX, 0, 0);
+	set_bit(EV_ABS, mma7660_idev->input->evbit);
+
+	idev->keycode = atkbd_keycode;
+	idev->keycodesize = sizeof(unsigned char);
+	idev->keycodemax = ARRAY_SIZE(atkbd_keycode);
+
+	for (i = 0; i < 512; i++)
+		if (atkbd_keycode[i] && atkbd_keycode[i] < ATKBD_SPECIAL)
+			set_bit(atkbd_keycode[i], idev->keybit);
+
+	mma7660_abs_dev->name		= ABS_DEVICE_NAME;
+	mma7660_abs_dev->id.bustype	= BUS_I2C;
+	mma7660_abs_dev->dev.parent	= &client->dev;
+
+	set_bit(EV_ABS,mma7660_abs_dev->evbit);
+	set_bit(ABS_X,mma7660_abs_dev->absbit);
+	set_bit(ABS_Y,mma7660_abs_dev->absbit);
+	set_bit(ABS_Z,mma7660_abs_dev->absbit);
+	set_bit(ABS_MISC,mma7660_abs_dev->absbit);
+
+
+	ret = input_register_polled_device(mma7660_idev);
 	if (ret) {
-		dev_err(&client->dev, "failed to register input device\n");
-		goto err_input_register_device;
+		dev_err(&client->dev, "register poll device failed!\n");
+		rc = -EINVAL;
+		goto err_unreg_input;
 	}
-	/*T*///printk("\nMotion IRQ11 Check \n############\n dev->client->irq %d\n",dev->client->irq);
 
-	if (dev->use_irq && dev->client->irq) {
-		ret = request_irq(dev->client->irq, mma7660_irq_handler,
-			IRQF_TRIGGER_RISING|IRQF_TRIGGER_FALLING,/* IRQF_TRIGGER_HIGH,*/
-			"accelerometer", dev);
-		/*T*///printk("\nMotion IRQ Check \n############\n dev->client->irq %d\n",dev->client->irq);
-		if (ret) {
-			dev_err(&client->dev, "failed to request irq\n");
-			goto err_request_irq;
-		}
-	}
-/*
-#ifdef USE_HRTIMER
-	if (!dev->use_irq) {
-		hrtimer_init(&dev->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-		dev->timer.function = mma7660_timer_func;
-		if (dev->enabled)
-			hrtimer_start(&dev->timer, ktime_set(1, 0), HRTIMER_MODE_REL);
-	}
-#endif
-	*/
-	//printk(" %s dev->sample_rate:  %d \n", __FUNCTION__, dev->sample_rate);
 
-	dev_info(&client->dev, "accelleration sensor(MMA7660) probed\n");
+	ret = input_register_device(mma7660_abs_dev);
+	if (ret) {
+		dev_err(&client->dev, "register abs device failed!\n");
+		rc = -EINVAL;
+		goto err_unreg_abs_input;
+	}
+
+	memset(&zsl_x,0,sizeof(struct slider));
+	memset(&zsl_y,0,sizeof(struct slider));
+	memset(&zsl_z,0,sizeof(struct slider));
+	memset(res_buff,0,RES_BUFF_LEN);
+
+/* enable gSensor mode 8g, measure */
+	i2c_smbus_write_byte_data(client, REG_MODE, 0x00);		/* standby mode   */
+	i2c_smbus_write_byte_data(client, REG_SPCNT, 0x00);		/* no sleep count */
+	i2c_smbus_write_byte_data(client, REG_INTSU, 0x00);		/* no interrupt   */
+	i2c_smbus_write_byte_data(client, REG_PDET, 0xE0);		/* disable tap    */
+	i2c_smbus_write_byte_data(client, REG_SR, 0x6B);		/* 4 measurement, 16 sample  */
+	i2c_smbus_write_byte_data(client, REG_MODE, 0x01);		/* active mode   */
+
 	return 0;
+err_unreg_abs_input:
+	input_unregister_device(mma7660_abs_dev);
+err_unreg_input:
+	input_unregister_polled_device(mma7660_idev);
+err_free_abs:
+	input_free_device(mma7660_abs_dev);
+err_free_input:
+	input_free_polled_device(mma7660_idev);
 
-err_request_irq:
-	input_unregister_device(input_dev);
-err_input_register_device:
-	input_free_device(input_dev);
-err_input_allocate_device:
-	misc_deregister(&misc_dev);
-err_miscdevice:
-	kfree(dev);
-err_alloc_data:
-err_probe_chip:
-err_check_functionality:
-	return ret;
+err_detach_client:
+	destroy_workqueue(mma7660_workqueue);
+
+	kfree(client);
+	return rc; 
 }
 
-static int mma7660_remove(struct i2c_client *client)
-{
-	struct mma7660_device *dev = i2c_get_clientdata(client);
-	/*temp1*///printk("\n\nCheck point : %s\n", __FUNCTION__);
 
-	cancel_work_sync(&dev->work);
+static int mma7660_remove(struct i2c_client *client)  {
 
-	if (dev->use_irq && dev->client->irq)
-		free_irq(dev->client->irq, dev);
-#ifdef USE_HRTIMER
-	if (!dev->use_irq) 
-		hrtimer_cancel(&dev->timer);
-#endif
+	input_unregister_device(mma7660_abs_dev);
+	input_unregister_polled_device(mma7660_idev);
+	input_free_device(mma7660_abs_dev);
+	input_free_polled_device(mma7660_idev);
 
-	input_unregister_device(dev->input_dev);
-	input_free_device(dev->input_dev);
-	misc_deregister(&misc_dev);
-	kfree(dev);
-	return 0;
+	device_remove_file(&client->dev, &mma7660_dev_attr);
+
+	kfree(i2c_get_clientdata(client));
+	flush_workqueue(mma7660_workqueue);
+	destroy_workqueue(mma7660_workqueue);
+
+	DBG("MMA7660 device detatched\n");	
+        return 0;
 }
 
-#ifdef CONFIG_PM
+
 static int mma7660_suspend(struct i2c_client *client, pm_message_t state)
 {
-	struct mma7660_device *dev = i2c_get_clientdata(client);
-	/*temp1*///printk("\n\nCheck point : %s\n", __FUNCTION__);
-
-	if (PM_EVENT_SUSPEND == state.event) {
-		cancel_work_sync(&dev->work);
-
-#ifdef USE_HRTIMER
-		if (!dev->use_irq) 
-			hrtimer_cancel(&dev->timer);
-#endif
-	}
-
+	mma_status.mode = i2c_smbus_read_byte_data(mma7660_client, REG_MODE);
+	i2c_smbus_write_byte_data(mma7660_client, REG_MODE,mma_status.mode & ~0x3);
+	DBG("MMA7660 suspended\n");
 	return 0;
 }
 
 static int mma7660_resume(struct i2c_client *client)
 {
-	struct mma7660_device *dev = i2c_get_clientdata(client);
-	/*temp1*///printk("\n\nCheck point : %s\n", __FUNCTION__);
-
-	if (mma7660_init_chip(client))
-		dev_err(&client->dev, "initialization of chip failed on resuming");
-
-#ifdef USE_HRTIMER
-	if (dev->enabled)
-		hrtimer_start(&dev->timer, ktime_set(1, 0), HRTIMER_MODE_REL);
-#endif
-
+	i2c_smbus_write_byte_data(mma7660_client, REG_MODE, mma_status.mode);
+	DBG("MMA7660 resumed\n");
 	return 0;
 }
-#endif
-
-static struct i2c_device_id mma7660_idtable[] = {
-        { "accel_mma7660", 1 },
-//        { }
-};
 
 
-static struct i2c_driver mma7660_driver = {
-	.probe		= mma7660_probe,
-	.remove		= mma7660_remove,
-	.id_table 	= mma7660_idtable,
-#ifdef CONFIG_PM
-	.suspend	= mma7660_suspend,
-	.resume		= mma7660_resume,
-#endif
-	.driver		= {
-		.name	= "accel_mma7660",
-	},
-};
-
-static int __init mma7660_enable_setup(char *__unused)
+static int __init init_mma7660(void)
 {
-	mma7660_enabled = 1;
-	/*temp1*///printk("\n\nCheck point : %s\n", __FUNCTION__);
+/* register driver */
+	int res;
 
-	return 1;
+	res = i2c_add_driver(&mma7660_driver);
+	if (res < 0){
+		printk(KERN_INFO "add mma7660 i2c driver failed\n");
+		return -ENODEV;
+	}
+	printk(KERN_INFO "add mma7660 i2c driver\n");
+
+	return (res);
 }
 
-__setup("accel_enable", mma7660_enable_setup);
-
-
-static int __devinit mma7660_init(void)
+static void __exit exit_mma7660(void)
 {
-	int ret;
-	/*temp1*///printk("\n\nCheck point1 : %s\n", __FUNCTION__);
-	accelerometer_wq = create_singlethread_workqueue("accelerometer_wq");
-	if (!accelerometer_wq)
-		{
-	/*temp1*///printk("\n\nCheck point2 : %s\n", __FUNCTION__);
-		
-		return -ENOMEM;
-		}
-	ret = i2c_add_driver(&mma7660_driver);
-	/*temp1*///printk("\n\nCheck point3 : %d\n",ret);
-	
-	return ret; 
+	printk(KERN_INFO "remove mma7660 i2c driver.\n");
+	return i2c_del_driver(&mma7660_driver);
 }
 
-static void __exit mma7660_exit(void)
-{
-	i2c_del_driver(&mma7660_driver);
-	/*temp1*///printk("\n\nCheck point : %s\n", __FUNCTION__);
-	if (accelerometer_wq)
-		destroy_workqueue(accelerometer_wq);
-}
 
-module_init(mma7660_init);
-module_exit(mma7660_exit);
+module_init(init_mma7660);
+module_exit(exit_mma7660);
 
-MODULE_DESCRIPTION("Acceleration MMA7660 Sensor Driver");
-MODULE_AUTHOR("Dae il, yu <diyu@lge.com>");
+module_param(debug, bool, S_IRUGO | S_IWUSR);
+module_param(emu_joystick, bool, S_IRUGO | S_IWUSR);
+module_param(poll_int, int, S_IRUGO | S_IWUSR);
+
+MODULE_PARM_DESC(debug, "1: Enable verbose debugging messages");
+MODULE_PARM_DESC(emu_joystick, "1: Enable emulate joystick movement by tilt");
+MODULE_PARM_DESC(poll_int, "set the poll interval of gSensor data (unit: ms)");
+
+MODULE_AUTHOR("Freescale Semiconductor, Inc.");
+MODULE_DESCRIPTION("MMA7660 sensor driver");
 MODULE_LICENSE("GPL");
-
