@@ -1015,10 +1015,6 @@ static struct platform_device *mango210_devices[] __initdata = {
 #ifdef CONFIG_SND_S3C_SOC_AC97
 	&s5pv210_device_ac97,
 #endif
-
-#ifdef CONFIG_TOUCHSCREEN_DUMMY
-	&s5p_device_dummy,
-#endif
 };
 
 unsigned int HWREV;

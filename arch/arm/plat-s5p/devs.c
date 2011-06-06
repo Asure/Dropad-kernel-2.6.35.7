@@ -238,23 +238,6 @@ struct platform_device s3c_device_usb_mass_storage = {
 };
 #endif
 
-#ifdef CONFIG_TOUCHSCREEN_DUMMY
-static struct resource s5p_dummy_resources[] = {
-	[0] = { 
-		.start = 0xe1800000,
-		.end   = 0xe1800000 + SZ_4K,
-		.flags = IORESOURCE_IRQ,
-	}
-};
-
-struct platform_device s5p_device_dummy = {
-	.name			= "dummy",
-	.id				=  0,
-	.num_resources	= ARRAY_SIZE(s5p_dummy_resources),
-	.resource		= s5p_dummy_resources,
-};
-#endif
-
 #ifdef CONFIG_DM9000
 static struct resource s5p_dm9000_resources[] = {
 	[0] = {
