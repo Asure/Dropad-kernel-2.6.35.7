@@ -55,31 +55,41 @@ config TOUCHSCREEN_AD7877
 	  To compile this driver as a module, choose M here: the
 	  module will be called ad7877.
 	  
-config TOUCHSCREEN_TF5X0X
-	tristate "FocalTech tf5x0x touchscreen"
+config TOUCHSCREEN_FT5X0X
+	tristate "FocalTech ft5x0x touchscreen"
 	depends on I2C
+	select FT5X0X_MULTITOUCH
 	default n
 	help
 	  Say Y here if you have the FocalTech ft5x0x touchscreen.
 
 	  If unsure, say N.
 	  
-config TOUCHSCREEN_TF5X06
-	tristate "FocalTech tf5x06 touchscreen"
+config TOUCHSCREEN_FT5X06
+	tristate "FocalTech ft5x06 touchscreen"
 	depends on I2C
+	select FT5X0X_MULTITOUCH
 	default n
 	help
 	  Say Y here if you have the FocalTech ft5x06 touchscreen.
 
 	  If unsure, say N.
 	  
-config TOUCHSCREEN_TF5406
-	tristate "FocalTech tf5406 touchscreen"
+config TOUCHSCREEN_FT5406
+	tristate "FocalTech ft5406 touchscreen"
 	depends on I2C
+	select FT5X0X_MULTITOUCH
 	default n
 	help
 	  Say Y here if you have the FocalTech ft5406 touchscreen.
+	  If unsure, say N.
 
+config FT5X0X_MULTITOUCH
+	tristate "FocalTech ft5x0x touchscreen multi-touch support"
+	depends on I2C
+	default n
+	help
+	  Say Y here To enable multitouch on Focaltech Touchscreens(required for most).
 	  If unsure, say N.
 
 config TOUCHSCREEN_AD7879_I2C

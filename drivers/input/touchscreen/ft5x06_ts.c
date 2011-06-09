@@ -28,6 +28,7 @@
 #include <linux/earlysuspend.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
+#include <linux/slab.h>
 //#include <asm/jzsoc.h>
 
 static struct i2c_client *this_client;

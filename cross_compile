@@ -1,0 +1,2 @@
+#rename this file to .cross_compile, and remove this first line, to use the compiler defined below.
+/opt/toolchains/arm-2009q3/bin/arm-none-linux-gnueabi-

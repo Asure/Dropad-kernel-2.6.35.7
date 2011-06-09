@@ -26,13 +26,14 @@
 
 #include <linux/i2c.h>
 #include <linux/input.h>
-#include <linux/i2c/ft5x0x_ts.h>
+#include <linux/i2c/ft5x06_ts.h>
 #include <linux/earlysuspend.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
 //#include <asm/jzsoc.h>
 
-//#define DEBUG	1
+#define DEBUG 1
+#define DEBUG_0 1
 
 #ifdef DEBUG_0
 	#define TS_DEBUG(fmt,args...) printk(fmt, ##args )
